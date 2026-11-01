@@ -14,6 +14,7 @@ import math
 import re
 import struct
 import time
+import traceback
 from copy import deepcopy
 from typing import Any
 
@@ -56,10 +57,51 @@ def _count_request_id(value: Any) -> str | None:
     return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}", value) else None
 
 
+def provider_error(exc: Exception, secrets=()) -> dict[str, Any]:
+    """Retain useful provider evidence without credentials or signed URLs."""
+    truncated = False
+    redacted = False
+    def read(value, name, default=None):
+        try:
+            return getattr(value, name, default)
+        except Exception:
+            return '[UNREADABLE PROPERTY]'
+    def clean(value):
+        nonlocal truncated, redacted
+        try:
+            original = str(value)
+        except Exception:
+            original = '[UNREADABLE ERROR]'
+        text = original
+        for secret in secrets:
+            if isinstance(secret, str) and len(secret) >= 8:
+                text = text.replace(secret, '[REDACTED]')
+        text = re.sub(r'(?i)(Bearer|Basic)\s+[A-Za-z0-9+/=_.-]+', '[REDACTED]', text)
+        text = re.sub(r'\bsk-[A-Za-z0-9_-]+', '[REDACTED]', text)
+        text = re.sub(r'''(?i)((?:set-cookie|cookie|authorization)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\r\n}]*)''', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)([?&]sig=)[^&\s\"\x27]+', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)((?:password|secret|api[_-]?key|token|signature|sign|nonce)[\"\x27]?\s*[:=]\s*[\"\x27]?)[^\s\"\x27&,}]+', r'\1[REDACTED]', text)
+        text = re.sub(r'(?i)(mongodb(?:\+srv)?://)[^/@\s]+@', r'\1[REDACTED]@', text)
+        text = re.sub(r'(?i)(https?://)[^/@\s]+:[^/@\s]+@', r'\1[REDACTED]@', text)
+        text = re.sub(r'(?i)([?&](?:X-Amz-[^=]+|timestamp|expires)=[^&\s]*)', '[REDACTED]', text)
+        redacted = redacted or text != original
+        truncated = truncated or len(text) > 4096
+        return text[:4096]
+    response = read(exc, 'response', None)
+    return {'exceptionClass': type(exc).__name__, 'message': clean(exc),
+            'stack': clean(''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))),
+            'status': read(exc, 'status_code', None),
+            'code': clean(read(exc, 'code', '')),
+            'requestId': clean(read(exc, 'request_id', '')),
+            'body': clean(read(exc, 'body', None) or read(response, 'text', '')),
+            'cause': clean(read(exc, '__cause__', None)),
+            'redacted': redacted, 'truncated': truncated}
+
+
 def _count_failure(model: str, digest: str, stdio_sdk: dict[str, str], code: str,
                    counted: int | None, request_id: str | None, elapsed: float,
                    effective_policy: dict[str, Any] | None,
-                   real_carrier: dict[str, Any] | None = None) -> LLMResult:
+                   real_carrier: dict[str, Any] | None = None, diagnostic: dict[str, Any] | None = None) -> LLMResult:
     # This is transport evidence only. It does not assert usage or a free count
     # request, and can only be returned before entering responses.create.
     wrapper = {
@@ -71,6 +113,7 @@ def _count_failure(model: str, digest: str, stdio_sdk: dict[str, str], code: str
             "adapterVersion": REAL_REPORT_IDENTITY if real_carrier else "1.0.7-dev5", "countedInputTokens": counted,
             "limit": effective_policy["maxInputTokens"] if effective_policy else 32000, "generationStarted": False,
             "elapsedMs": max(0, int(elapsed * 1000)), "countRequestId": request_id,
+            **({"diagnostic": diagnostic} if diagnostic else {}),
             **({"effectivePolicy": effective_policy, "contextWarnings": _context_warnings(counted, effective_policy)}
                if effective_policy else {}),
             **({"manifestDigest": real_carrier["manifestDigest"],
@@ -319,11 +362,10 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
     with client_factory(**kwargs) as client:
         try:
             count = client.responses.input_tokens.count(**deepcopy(count_payload))
-        except Exception:
-            # Never persist exception text, credentials or provider error bodies.
-            # Generation errors are deliberately outside this catch boundary.
+        except Exception as exc:
+            # Counting remains a proven pre-generation failure; retain its diagnostic separately.
             return _count_failure(model, digest, stdio_sdk, "input_count_request_failed",
-                                  None, None, clock() - started, effective_policy)
+                                  None, None, clock() - started, effective_policy, diagnostic=provider_error(exc, credentials.values()))
         raw_count = _field(count, "input_tokens")
         input_count = _integer(raw_count)
         code = ("input_count_unavailable" if raw_count is None else
@@ -338,7 +380,10 @@ def generate(llm, client_factory, model, credentials, messages, parameters,
             remaining = min(remaining, (deadline_at_ms - time.time() * 1000) / 1000)
         if remaining <= 0:
             raise InvokeBadRequestError("Booklet timeout expired before generation.")
-        response = client.responses.create(**payload, timeout=remaining)
+        try:
+            response = client.responses.create(**payload, timeout=remaining)
+        except Exception as exc:
+            raise InvokeBadRequestError("Booklet provider outcome unknown: " + json.dumps(provider_error(exc, credentials.values()), sort_keys=True)) from None
     # Avoid putting API error messages or opaque reasoning into saved evidence.
     status = _field(response, "status")
     if status not in ("completed", "incomplete", "failed", "cancelled"):
@@ -547,9 +592,9 @@ def _generate_real_report(llm, client_factory, model, credentials, messages, par
             _real_reject("deadline expired before counting")
         try:
             count = client.responses.input_tokens.count(**count_payload, timeout=count_remaining)
-        except Exception:
+        except Exception as exc:
             return _count_failure(model, carrier["finalRequestDigest"], sdk, "input_count_request_failed",
-                                  None, None, clock() - started, effective_policy, carrier)
+                                  None, None, clock() - started, effective_policy, carrier, provider_error(exc, credentials.values()))
         input_count = _integer(_field(count, "input_tokens"))
         if input_count is None or input_count > effective_policy["maxInputTokens"]:
             return _count_failure(model, carrier["finalRequestDigest"], sdk, "input_limit_exceeded" if input_count else "input_count_invalid", input_count, _count_request_id(count), clock() - started, effective_policy, carrier)
@@ -558,10 +603,10 @@ def _generate_real_report(llm, client_factory, model, credentials, messages, par
             _real_reject("deadline expired before generation")
         try:
             response = client.responses.create(**deepcopy(payload), timeout=remaining)
-        except Exception:
+        except Exception as exc:
             # The request may have reached the provider. The application must
             # retain the full held liability until readback can establish usage.
-            _real_reject("provider outcome unknown")
+            _real_reject("provider outcome unknown: " + json.dumps(provider_error(exc, credentials.values()), sort_keys=True))
     usage = _usage(response)
     status = _field(response, "status")
     if status not in ("completed", "incomplete", "failed", "cancelled"):

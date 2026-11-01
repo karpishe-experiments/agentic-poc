@@ -136,6 +136,9 @@ describe("Real workflow graph candidates", () => {
       operation_id: identity.operation_id, workflow_run_id: identity.workflow_run_id,
       parent_workflow_run_id: identity.parent_workflow_run_id, input_fingerprint: data.inputFingerprint };
     const ack = execute(node(graph, "real_image_result").data.code, ackArgs);
+    expect(() => execute(node(graph, "real_image_result").data.code, { ...ackArgs,
+      tool_json: [{ result: { status: "unknown_outcome", diagnostic: { code: "provider_timeout", requestId: "req_failure" } } }] }))
+      .toThrow(/provider outcome.*provider_timeout/);
     expect(JSON.parse(ack.image_result as string)).toEqual({ runId: identity.run_id,
       operationId: identity.operation_id, workflowRunId: identity.workflow_run_id,
       parentWorkflowRunId: null, inputFingerprint: data.inputFingerprint,

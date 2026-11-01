@@ -39,9 +39,19 @@ export type ExperimentCampaignDocument = BaseDocument & {
   createdAtMs: number; updatedAtMs: number;
 };
 export type ExperimentRunDocument = BaseDocument & {
+  externalErrors?: import("@/lib/experiment-runner/external-errors").ExternalError[];
   failureDiagnostics?: FailureDiagnostics;
   m4?: { campaignId: string; policyHash: string; policyJson: string };
   execution?: { campaignId: string; profileHash: string; profileJson: string };
+  executionAmendments?: import("@/lib/experiment-runner/execution-amendment").ExecutionAmendment[];
+  imageReplacementParking?: { operationId: string; evidenceDigest: string; originalRevision: number; parkedAtMs: number };
+  allowanceAdjustment?: { approvalId: string; reference: string; requestDigest: string;
+    totals: import("@/lib/experiment-runner/execution-policy").ExecutionAllowance;
+    receipt?: { runRevision: number; pending: boolean };
+    resume: boolean; requestedAtMs: number } | null;
+  imageReplacementApprovals?: { approvalId: string; operationId: string; replacementOperationId: string;
+    reference: string; requestDigest: string; evidenceDigest: string; approvedAtMs: number;
+    batch?: { itemId: string; previousStatus: string; previousResultJson: string } }[];
   pendingApproval?: { kind: "allowance_v1"; reason: import("@/db/experiment-execution-allowance").ExecutionAllowanceReason;
     requestDigest: string; requestedAtMs: number; operationId: string | null; targetTaskId?: ExperimentTask;
       targetVersionId?: string; decisionOperationId?: string; instruction?: string;
@@ -67,6 +77,10 @@ export type ExperimentRunDocument = BaseDocument & {
 };
 export type ExperimentOperationDocument = BaseDocument & {
   executionAllowanceCancellation?: { kind: "undispatched_allowance_v1"; proofDigest: string; cancelledAtMs: number };
+  executionAmendmentId?: string;
+  imageReplacement?: { approvalId: string; replacementOperationId: string; evidenceDigest: string };
+  replacesImageOperationId?: string;
+  externalErrors?: import("@/lib/experiment-runner/external-errors").ExternalError[];
     executionApprovedDecision?: { approvalId: string; decisionJson: string; materializedAtMs: number };
   localReportFailure?: { code: "report_request_too_large"; scope: "context" | "request" | "authorization"; requestBytes: number; byteLimit: number;
     definitionHash: string; requestDigest: string; policyHash: string; configurationHash: string;

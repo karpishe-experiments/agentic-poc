@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { env } from "node:process";
+import { externalError, externalErrorBody, redactExternalError, retainExternalError } from "@/lib/experiment-runner/external-errors";
 import { registerOwnedController } from "@/lib/operations/controllers";
 import { opaqueIdSchema } from "@/lib/contracts/common";
 import { resultEnvelopeSchema } from "@/lib/contracts/experiment-runner";
@@ -16,6 +18,7 @@ const execution = z.object({
   outputs: z.record(z.string(), z.unknown()).nullable().optional(),
   error: z.unknown().optional(), total_tokens: z.unknown().optional(), total_steps: z.unknown().optional(),
 }).strip().transform(({ error, total_tokens, total_steps, ...execution }) => ({ ...execution,
+  ...(error ? { diagnosticError: redactExternalError(error).value } : {}),
   ...(execution.status === "failed" && error === "Booklet complete input exceeds its verified token limit." && total_tokens === 0
     ? { legacyCountFailure: { code: "legacy_input_count_guard" as const, totalTokens: 0 as const } } : {}),
   // Diagnostic only. Ordinary dispatch must not infer non-dispatch from this
@@ -81,7 +84,8 @@ function runtimeBody(input: z.infer<typeof runtimeInputSchema>): string {
   return JSON.stringify({ inputs, response_mode: "streaming", user: `booklet-${input.runId}` });
 }
 
-// Do not return provider bodies, URLs or credentials to logs or browser clients.
+// Provider evidence is retained separately after redaction; this parser owns
+// only the bounded workflow response and does not change its outcome.
 async function readResponse(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.body) throw new Error("Missing runtime response");
   const reader = response.body.getReader();
@@ -272,6 +276,7 @@ async function readWorkflowStream(
   options: WorkflowStartOptions,
   signal: AbortSignal,
   acknowledge: (result: RuntimeResult) => void,
+  identity: RuntimeInput,
 ): Promise<void> {
   if (!response.body) {
     acknowledge({ kind: "unknown" });
@@ -352,13 +357,38 @@ async function readWorkflowStream(
     if (!stop) for (const event of parser.finish()) {
       if (await process(event)) break;
     }
-  } catch { /* A stream loss is evidence to reconcile, never permission to replay. */ }
+  } catch (error) {
+    if (!env.VITEST) await retainExternalError(identity, externalError({ service: "dify", stage: "workflow_stream",
+      error, dispatchStarted: true, secrets: [binding.apiKey] }));
+  }
   if (!accepted) acknowledge({ kind: "unknown" });
   if (!notified) await terminal({ kind: "unknown" });
   try { await reader.cancel(); } catch { /* The stream is already closed or aborted. */ }
 }
 
-export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: typeof fetch = fetch): WorkflowRuntime {
+export function createWorkflowRuntime(config: BookletRunnerConfig, rawFetcher: typeof fetch = fetch): WorkflowRuntime {
+  const fetcher: typeof fetch = async (url, init) => {
+    const started = Date.now();
+    let identity: { runId?: string; operationId?: string; workflowRunId?: string } = {};
+    try {
+      if (typeof init?.body === "string") {
+        const body = JSON.parse(init.body);
+        identity = { runId: body.inputs?.run_id ?? body.user?.replace(/^booklet-/, ""), operationId: body.inputs?.operation_id };
+      } else identity = { workflowRunId: String(url).match(/\/workflows\/run\/([a-f0-9-]+)/)?.[1] };
+    } catch { /* Missing identity does not change request behavior. */ }
+    const record = async (error: unknown, status?: number, requestId?: string) => {
+      if (!process.env.VITEST) await retainExternalError(identity, externalError({ service: "dify", stage: "http_transport",
+        error, status, requestId, method: init?.method ?? "GET", destination: String(url), elapsedMs: Date.now() - started,
+        dispatchStarted: init?.method === "POST", secrets: [...config.bindings, ...(config.real?.bindings ?? [])].map(b => b.apiKey) }));
+    };
+    try {
+      const response = await rawFetcher(url, init);
+      if (!response.ok) {
+        await record({ message: response.statusText, ...await externalErrorBody(response, init?.signal) }, response.status, response.headers.get("x-request-id") ?? undefined);
+      }
+      return response;
+    } catch (error) { await record(error); throw error; }
+  };
   async function retrieveRequest(binding: BookletBinding, path: string, options: WorkflowRequestOptions): Promise<RuntimeResult> {
     const scope = requestAbortScope(options, DEFAULT_REQUEST_DEADLINE_MS);
     if (scope.timeoutMs === 0 || scope.signal.aborted) {
@@ -377,7 +407,12 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       const raw = await readResponse(response, scope.signal);
       const parsed = execution.safeParse(raw);
       return parsed.success ? { kind: "execution", execution: parsed.data } : { kind: "unknown" };
-    } catch { return { kind: "unknown" }; } finally { scope.dispose(); }
+    } catch (error) {
+      if (!process.env.VITEST) await retainExternalError({ workflowRunId: path.match(/\/workflows\/run\/([a-f0-9-]+)/)?.[1] },
+        externalError({ service: "dify", stage: "workflow_readback", error, method: "GET", destination: `${config.baseUrl}/v1${path}`,
+          timeoutMs: scope.timeoutMs, secrets: [binding.apiKey] }));
+      return { kind: "unknown" };
+    } finally { scope.dispose(); }
   }
 
   async function startRequest(binding: BookletBinding, input: z.infer<typeof runtimeInputSchema>, options: WorkflowStartOptions): Promise<RuntimeResult> {
@@ -418,7 +453,7 @@ export function createWorkflowRuntime(config: BookletRunnerConfig, fetcher: type
       // Keep consuming to the supplied operation deadline. Do not abort a
       // successfully acknowledged provider execution just because its ID is known.
       readerStarted = true;
-      void readWorkflowStream(response, binding, options, scope.signal, acknowledge)
+      void readWorkflowStream(response, binding, options, scope.signal, acknowledge, input)
         .finally(dispose);
       const result = await acknowledgement;
       clearTimeout(acknowledgementTimer);

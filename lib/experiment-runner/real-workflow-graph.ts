@@ -274,6 +274,9 @@ def main(tool_json, request_json, run_id, operation_id, workflow_run_id, parent_
     if not isinstance(tool_json, list) or len(tool_json) != 1 or not isinstance(tool_json[0], dict):
         raise ValueError('Booklet image tool result is missing')
     wrapper = tool_json[0]
+    outcome = wrapper.get('result')
+    if isinstance(outcome, dict) and outcome.get('status') in ('unknown_outcome', 'failed_after_provider', 'rejected_pre_provider'):
+        raise ValueError('Booklet image provider outcome: ' + json.dumps(outcome, sort_keys=True))
     if set(wrapper) != {'result', 'upload'}:
         raise ValueError('Booklet image upload receipt is missing')
     result = wrapper['result']

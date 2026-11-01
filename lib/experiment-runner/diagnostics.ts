@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { externalError, retainExternalError } from "@/lib/experiment-runner/external-errors";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import { budgetRemaining, safeFailure } from "@/lib/operations/completion-failure";
 import type { AdmissionReadDiagnostic } from "@/lib/contracts/experiment-admission-diagnostics";
@@ -14,6 +15,7 @@ export type DiagnosticEvent = Identity & Counters & {
   elapsedMs: number; outcome: "succeeded" | "failed";
   budgetAtStartMs: number | null; remainingBudgetMs: number | null;
   failure?: ReturnType<typeof safeFailure>;
+  error?: ReturnType<typeof externalError>;
 };
 type DiagnosticBuffer = { startedAt: string; dropped: number; events: DiagnosticEvent[] };
 // Next.js can bundle the handler and runner separately within the same process.
@@ -86,12 +88,15 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
   const counters: Counters = { queryCount: 0, storageCallCount: 0, transactionAttempts: 0 };
   let outcome: DiagnosticEvent["outcome"] = "failed";
   let failure: ReturnType<typeof safeFailure> | undefined;
+  let errorDetails: ReturnType<typeof externalError> | undefined;
   try {
     const result = await current.run(counters, work);
     outcome = "succeeded";
     return result;
   } catch (error) {
     failure = safeFailure(error);
+    errorDetails = externalError({ service: "booklet", stage: phase, error, elapsedMs: Math.round(performance.now() - start) });
+    if (!process.env.VITEST) await retainExternalError(identity, errorDetails);
     throw error;
   } finally {
     const parent = current.getStore();
@@ -106,7 +111,7 @@ export async function measurePhase<T>(identity: Identity, phase: string, work: (
     const event: DiagnosticEvent = { event: "booklet_callback_phase", timestamp: new Date().toISOString(), runId: identity.runId,
       ...(identity.operationId ? { operationId: identity.operationId } : {}), phase,
       elapsedMs: Math.round(performance.now() - start), budgetAtStartMs, remainingBudgetMs: budgetRemaining(), ...counters, outcome,
-      ...(failure ? { failure } : {}) };
+      ...(failure ? { failure } : {}), ...(errorDetails ? { error: errorDetails } : {}) };
     buffer.events.push(event);
     if (buffer.events.length > 5000) { buffer.events.shift(); buffer.dropped++; }
     console.info(JSON.stringify(event));

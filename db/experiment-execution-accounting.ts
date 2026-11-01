@@ -11,6 +11,8 @@ import { assessM4ProviderResult, m4RetainedProviderWrapper } from "@/lib/experim
 import { m4Hash, m4CanonicalJson } from "@/lib/experiment-runner/m4-request";
 import { realImageCharge, realImageResultSchema, verifyRealImageRequest } from "@/lib/experiment-runner/real-image-contract";
 import { assessRealReportProviderResult } from "@/lib/experiment-runner/real-report-provider-result";
+import { hasApprovedImageReplacement } from "@/db/experiment-image-replacement";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 
 function invalid(): never { throw new Error("Execution accounting or ownership is incomplete."); }
 
@@ -27,6 +29,25 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
   const operations = await database.collections.experiment_operations.find({ runId: run._id }, { session }).toArray();
   let text = 0, images = 0, reserved = 0, settled = 0;
   for (const operation of operations) {
+    if (operation.executionAmendmentId) {
+      const binding = operationConfiguration(run, operation).find(b => b.role === operation.role && b.taskId === (operation.role === "image" ? null : operation.taskId));
+      if (!binding || operation.verifiedWorkflowId && operation.verifiedWorkflowId !== binding.publishedWorkflowId) invalid();
+    }
+    if (operation.imageReplacement) {
+      if (!await hasApprovedImageReplacement(database, session, run, operation)) invalid();
+      const reservation = operation.realImageReservation, observation = operation.realImageObservation, prepared = operation.realImagePreparation;
+      if (!reservation || !observation || !prepared || operation.reservationCount !== 1 || operation.mode !== "real" ||
+          reservation.campaignId !== campaign._id || reservation.profileHash !== snapshot.hash ||
+          reservation.requestDigest !== verifyRealImageRequest(JSON.parse(prepared.requestJson)).requestDigest ||
+          prepared.requestDigest !== reservation.requestDigest || prepared.logicalFingerprint !== operation.inputFingerprint ||
+          reservation.evidenceDigest !== observation.resultDigest || observation.resultDigest !== m4Hash(observation.resultJson) ||
+          reservation.settledMicrodollars !== null || reservation.unsettledMicrodollars !== reservation.planningHoldMicrodollars ||
+          !Number.isSafeInteger(reservation.planningHoldMicrodollars) || reservation.planningHoldMicrodollars <= 0) invalid();
+      const result = realImageResultSchema.parse(JSON.parse(observation.resultJson));
+      if (result.status !== "unknown_outcome" || result.requestDigest !== prepared.requestDigest || result.usage || result.output) invalid();
+      images++; reserved += reservation.unsettledMicrodollars;
+      continue;
+    }
     if (operation.executionAllowanceCancellation) {
       const proofDigest = m4Hash(m4CanonicalJson({ kind: "undispatched_allowance_v1", runId: run._id,
         operationId: operation._id, profileHash: campaign.profileHash,

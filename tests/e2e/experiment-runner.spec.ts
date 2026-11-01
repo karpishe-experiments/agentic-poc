@@ -54,6 +54,55 @@ function savedRun(status: "queued" | "paused" | "completed", revision: number) {
 
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAF/gJ+Yk7I3QAAAABJRU5ErkJggg==", "base64");
 
+test("reviews a parked unknown image, its diagnostics and one approved replacement", async ({ page }) => {
+  const operationId = "00000000-0000-4000-8000-000000000790";
+  const totals = { maxMicrodollars: 5_000_000, textCalls: 120, imageCalls: 12, steps: 300,
+    textRevisions: 1, imageRevisions: 1, noProgress: 3 };
+  let completed = false;
+  const writes: unknown[] = [], external: string[] = [];
+  page.context().on("request", request => { const url = new URL(request.url());
+    if (!["127.0.0.1", "localhost"].includes(url.hostname)) external.push(url.origin); });
+  await page.context().route("**/api/assets/**", route => route.fulfill({ status: 200, contentType: "image/png", body: png }));
+  await page.context().route("**/api/experiments/booklet-runs**", async route => {
+    const request = route.request(), path = new URL(request.url()).pathname;
+    if (request.method() === "POST") {
+      writes.push(request.postDataJSON()); completed = true;
+      return route.fulfill({ json: { data: { approvalId: "fixture", replacementOperationId: "replacement", reused: false } } });
+    }
+    if (path.endsWith("/diagnostics")) return route.fulfill({ json: { data: { page: 0, hasMore: false,
+      operations: [{ operationId, errors: [{ message: "Provider timeout <script>not executed</script>", requestId: "req_fixture", truncated: false }] }] } } });
+    if (path.endsWith("/image-replacement")) return route.fulfill({ json: { data: { runId, operationId, expectedRevision: 10,
+      expectedCampaignRevision: 2, previewDigest: "a".repeat(64), expiresAtMs: Date.now() + 300_000,
+      terminalStatus: "failed", target: { taskId: "J13", subjectId: "page3" }, totals,
+      settledMicrodollars: 500_000, reservedMicrodollars: 4_500_000, retainedLiabilityMicrodollars: 4_500_000 } } });
+    const state = { ...savedRun(completed ? "completed" : "paused", 10), mode: "real", status: completed ? "completed" : "blocked",
+      safeFailure: completed ? null : "unknown_outcome", activeOperationId: null,
+      imageReplacementParking: { operationId },
+      executionAllowance: { campaignId: "campaign", revision: 2, totals, settledMicrodollars: 500_000,
+        reservedMicrodollars: 4_500_000, textRequests: 43, imageRequests: 9, latestApprovalReference: "fixture" },
+      imageReplacementApprovals: completed ? [{ approvalId: "fixture", operationId, replacementOperationId: "replacement", reference: "fixture" }] : [],
+      operationHistory: [{ id: operationId, role: "image", taskId: "J13", state: "unknown", createdAtMs: 1, updatedAtMs: 2 }] };
+    return route.fulfill({ json: { data: path.endsWith(runId) ? state : { runs: [state], hasMore: false } } });
+  });
+  await page.goto(`/experiments/booklet-runs/${runId}`);
+  await page.getByText("Technical details and external call errors").click();
+  await expect(page.locator("pre").filter({ hasText: "req_fixture" })).toBeVisible();
+  await page.getByText("Inspect original and prepare review").click();
+  const review = page.getByRole("region", { name: "Image replacement review" });
+  await expect(review.getByText(/Original unknown liability/)).toBeVisible();
+  await page.screenshot({ path: "output/playwright/m5-replacement-review.png", fullPage: true });
+  await review.getByLabel("New total USD allowance").fill("6");
+  await review.getByLabel("Operator approval reference").fill("Fixture only: USD 6 total plus one replacement");
+  await review.getByRole("checkbox").check();
+  await review.getByText("Approve exact allowance and one replacement").click();
+  await expect(page.getByText(/Completed with an approved replacement/)).toBeVisible();
+  await page.screenshot({ path: "output/playwright/m5-replacement-completed.png", fullPage: true });
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ action: "image_replacement", operationId, acknowledgeUnknownCharge: true,
+    totals: { ...totals, maxMicrodollars: 6_000_000 } });
+  expect(external).toEqual([]);
+});
+
 async function seedSavedBooklet() {
   const uri = process.env.MONGODB_URI;
   const databaseName = process.env.MONGODB_DATABASE;

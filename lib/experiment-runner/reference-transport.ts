@@ -1,4 +1,5 @@
 import { opaqueIdSchema } from "@/lib/contracts/common";
+import { externalError, externalErrorBody, retainExternalError } from "@/lib/experiment-runner/external-errors";
 import { ExperimentImageValidationError, validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import { MAX_REFERENCE_UPLOAD_BYTES } from "@/lib/experiment-runner/image-limits";
 import type { BookletBinding, BookletRunnerConfig } from "@/lib/experiment-runner/config";
@@ -59,17 +60,31 @@ export function createReferenceTransport(config: BookletRunnerConfig, fetcher: t
           method: "POST", redirect: "error", cache: "no-store",
           headers: { Authorization: `Bearer ${binding.apiKey}` }, body, signal,
         });
-      } catch { return { kind: "unknown" }; }
+      } catch (error) {
+        if (!process.env.VITEST) await retainExternalError({ runId }, externalError({ service: "dify", stage: "reference_upload",
+          error, dispatchStarted: true, method: "POST", destination: `${config.baseUrl}/v1/files/upload`, secrets: [binding.apiKey] }));
+        return { kind: "unknown" };
+      }
+      if (!response.ok && !process.env.VITEST) {
+        await retainExternalError({ runId }, externalError({ service: "dify", stage: "reference_upload",
+          error: { status: response.status, message: response.statusText, ...await externalErrorBody(response, signal) }, status: response.status, dispatchStarted: true,
+          method: "POST", requestId: response.headers.get("x-request-id") ?? undefined, secrets: [binding.apiKey] }));
+      }
       if ([400, 401, 403, 404, 413, 415, 422].includes(response.status)) return { kind: "rejected", reason: "http_rejected" };
       if (!response.ok) return { kind: "unknown" };
       try {
         const acknowledgement = await readAcknowledgement(response, signal);
-        if (!acknowledgement || typeof acknowledgement !== "object") return { kind: "unknown" };
+        if (!acknowledgement || typeof acknowledgement !== "object") throw Error("Reference upload acknowledgement is not an object.");
         const record = acknowledgement as Record<string, unknown>;
         const id = opaqueIdSchema.safeParse(record.id);
-        if (!id.success || record.size !== image.byteLength) return { kind: "unknown" };
+        if (!id.success || record.size !== image.byteLength) throw Error("Reference upload acknowledgement has an invalid identity or byte count.");
         return { kind: "uploaded", id: id.data, byteLength: image.byteLength, mimeType: image.mimeType, sha256: image.sha256 };
-      } catch { return { kind: "unknown" }; }
+      } catch (error) {
+        if (!process.env.VITEST) await retainExternalError({ runId }, externalError({ service: "dify", stage: "reference_upload_acknowledgement",
+          error, status: response.status, dispatchStarted: true, method: "POST", secrets: [binding.apiKey],
+          requestId: response.headers.get("x-request-id") ?? undefined }));
+        return { kind: "unknown" };
+      }
     },
   };
 }

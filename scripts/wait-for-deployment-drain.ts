@@ -3,6 +3,7 @@ import { withMongoTransaction } from "@/db/client";
 import { failTerminalPageBatchItems } from "@/db/experiment-page-batch-failure";
 import { finishDraining, reconcileInterruptedMutations } from "@/lib/application/deployment-control";
 import { withOperationBudget } from "@/lib/operations/budget";
+import { hasApprovedImageReplacement } from "@/db/experiment-image-replacement";
 
 if (process.env.RUNNER_ENABLED !== "false") throw new Error("Drain verification requires RUNNER_ENABLED=false.");
 const database = getDatabase();
@@ -29,12 +30,21 @@ try {
     ]);
     const activeMutations = Math.max(0, control?.activeMutations ?? 0);
     if (!control?.draining || control.maintenance) throw new Error("Deployment is not in draining mode; inspect admission state.");
-    const unresolved = await database.collections.experiment_operations.find({ $or: [
+    const candidates = await database.collections.experiment_operations.find({ $or: [
       { state: { $in: ["started", "unknown"] } },
       { state: "prepared" },
       { state: "succeeded", dispatchStartedAtMs: { $ne: null }, verifiedWorkflowId: null },
       { "lifecycle.unresolved": true },
-    ] }, { projection: { _id: 1, runId: 1, state: 1, deadlineAtMs: 1 } }).toArray();
+    ] }, { projection: { _id: 1, runId: 1, state: 1, deadlineAtMs: 1, imageReplacement: 1 } }).toArray();
+    const unresolved = [];
+    for (const op of candidates) {
+      const retained = op.imageReplacement && await withMongoTransaction(database, async session => {
+        const run = await database.collections.experiment_runs.findOne({ _id: op.runId }, { session });
+        const original = await database.collections.experiment_operations.findOne({ _id: op._id, runId: op.runId }, { session });
+        return run && original && await hasApprovedImageReplacement(database, session, run, original);
+      });
+      if (!retained) unresolved.push({ _id: op._id, runId: op.runId, state: op.state, deadlineAtMs: op.deadlineAtMs });
+    }
     const preparations = await database.collections.experiment_runs.find({
       preparation: { $ne: null }, $or: [{ "preparation.outcome": { $ne: "failed" } }, { "preparation.unresolved": true }],
     }, { projection: { _id: 1, preparation: 1 } }).toArray();

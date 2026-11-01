@@ -20,7 +20,7 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_key, item:
   item && typeof item === "object" && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
-function invalid(message: string): never { throw new ExperimentRepositoryError("invalid_state", message); }
+function invalid(message: string, cause?: unknown): never { throw new ExperimentRepositoryError("invalid_state", message, undefined, { cause }); }
 function json(raw: string | null | undefined): unknown {
   try { return JSON.parse(raw ?? ""); } catch { return invalid("Saved style evidence is malformed."); }
 }
@@ -50,8 +50,9 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     // The original image callback can arrive before publication GET readback.
     // Permit source reads for that exact claimed unknown J13 operation only;
     // assembly mutations and later publication/approval checks remain unchanged.
-    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+    const imageOperationId = run.activeOperationId ?? run.imageReplacementParking?.operationId;
+    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
+      ? await database.collections.experiment_operations.findOne({ _id: imageOperationId, runId: run._id,
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
@@ -138,7 +139,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         if (!await store.exists(asset.uri)) invalid("Saved style sample bytes are missing.");
         const bytes = await store.get(asset.uri);
         if (bytes.byteLength !== asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) invalid("Saved style sample bytes are corrupt.");
-      } catch { invalid("Style sample storage verification failed."); }
+      } catch (cause) { invalid("Style sample storage verification failed.", cause); }
     }
     return withMongoTransaction(database, async (session) => {
       const checked = await load(value, session);
@@ -180,7 +181,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
       try {
         const bytes = verification?.attempt ? await verification.attempt.read(asset) : await store.get(asset.uri);
         if (bytes.byteLength !== asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) invalid("Saved style sample bytes are corrupt.");
-      } catch { invalid("Style sample storage verification failed."); }
+      } catch (cause) { invalid("Style sample storage verification failed.", cause); }
     }
   }
   return { assemble, verifyVersion };

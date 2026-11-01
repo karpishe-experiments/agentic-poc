@@ -12,9 +12,10 @@ export type ExecutionApprovalRecord = {
   approvalId: string; reference: string; requestDigest: string;
   predecessorApprovalId: string | null;
   previousTotals: ExecutionAllowance | null; totals: ExecutionAllowance;
-  reason: ExecutionAllowanceReason | "initial"; channel: "operator_http";
+  reason: ExecutionAllowanceReason | "initial" | "operator_adjustment"; channel: "operator_http";
   pendingRequestDigest: string | null; runRevision: number | null;
   campaignRevision: number; grantedAtMs: number;
+  adjustmentReceipt?: { runRevision: number; pending: boolean };
 };
 export type ExecutionDeclineRecord = { declineId: string; reference: string; requestDigest: string;
   pendingRequestDigest: string; previousTotals: ExecutionAllowance; totals: ExecutionAllowance;
@@ -304,7 +305,7 @@ export function createExecutionAllowanceLedger(database: Database) {
     materialize?: (run: ExperimentRunDocument, session: ClientSession) => Promise<Record<string, unknown>>) {
     const run = await runs.findOne({ _id: input.runId }, { session });
     if (!run?.execution) conflict("Run has no approval-only execution profile.");
-    const campaign = await current(session, run.execution.campaignId, run);
+    const campaign = await current(session, run.execution!.campaignId, run);
     const totals = executionAllowanceSchema.parse(input.totals);
     const requestDigest = digest({ runId: input.runId, approvalId: input.approvalId, reference: input.reference,
       expectedPendingDigest: input.expectedPendingDigest, totals });
@@ -386,6 +387,80 @@ export function createExecutionAllowanceLedger(database: Database) {
     return { runRevision: changed.revision, campaignRevision: campaign.revision + 1, reused: false as const };
   }
 
+  // An adjustment changes authority only. In particular it cannot clear a paid
+  // unknown outcome or turn a manual pause into continuation authority.
+  async function adjust(session: ClientSession, input: { runId: string; approvalId: string; reference: string;
+    expectedRunRevision: number; expectedCampaignRevision: number; totals: ExecutionAllowance; nowMs: number }) {
+    const run = await runs.findOne({ _id: input.runId }, { session });
+    if (!run?.execution) conflict("Run has no approval-based execution profile.");
+    const campaign = await current(session, run.execution.campaignId, run);
+    const totals = executionAllowanceSchema.parse(input.totals);
+    const requestDigest = digest({ kind: "operator_adjustment", runId: run._id,
+      approvalId: input.approvalId, reference: input.reference, totals });
+    const prior = campaign.approvals.find(item => item.approvalId === input.approvalId);
+    if (prior) {
+      if (prior.requestDigest !== requestDigest) conflict("Approval key belongs to different terms.");
+      return { approvalId: prior.approvalId, ...(prior.adjustmentReceipt ?? { runRevision: prior.runRevision! + 1, pending: false }), reused: true };
+    }
+    if (run.allowanceAdjustment) {
+      if (run.allowanceAdjustment.requestDigest !== requestDigest) conflict("Another allowance adjustment is pending.");
+      return { approvalId: input.approvalId, ...(run.allowanceAdjustment.receipt ?? { runRevision: run.revision, pending: true }), reused: true };
+    }
+    if (run.revision !== input.expectedRunRevision || campaign.revision !== input.expectedCampaignRevision) stale("Run or campaign changed.");
+    if (["completed", "failed"].includes(run.status) || run.pendingApproval) conflict("Use the current pending decision or an unfinished run.");
+    for (const key of Object.keys(totals) as Array<keyof ExecutionAllowance>) {
+      if (totals[key] < campaign.allowance[key]) conflict("Approval cannot reduce an earlier allowance.");
+    }
+    const exposure = campaign.settledMicrodollars + campaign.reservedMicrodollars;
+    if (!Number.isSafeInteger(exposure) || exposure < 0 || totals.maxMicrodollars < exposure ||
+        totals.textCalls < run.counters.logicalText || totals.imageCalls < run.counters.logicalImage ||
+        totals.steps < run.counters.steps || totals.textRevisions < run.textRevisions ||
+        totals.imageRevisions < run.imageRevisions || totals.noProgress < (run.noProgressCount ?? 0)) {
+      conflict("Approval is below retained counters or liabilities.");
+    }
+    if (digest(totals) === digest(campaign.allowance)) conflict("Approval must increase at least one allowance.");
+    const pending = { approvalId: input.approvalId, reference: input.reference, requestDigest, totals,
+      receipt: { runRevision: run.revision + 1, pending: true },
+      resume: !run.pauseRequested && !["paused", "blocked"].includes(run.status), requestedAtMs: input.nowMs };
+    const saved = await runs.updateOne({ _id: run._id, revision: run.revision }, { $set: {
+      allowanceAdjustment: pending, pauseRequested: true, updatedAtMs: input.nowMs }, $inc: { revision: 1 } }, { session });
+    if (saved.modifiedCount !== 1) stale("Run changed before adjustment was saved.");
+    const applied = await applyAdjustment(session, run._id, input.nowMs);
+    const receipt = { runRevision: applied?.revision ?? run.revision + 1, pending: !applied };
+    if (applied) await campaigns.updateOne({ _id: campaign._id, "approvals.approvalId": input.approvalId },
+      { $set: { "approvals.$.adjustmentReceipt": receipt } }, { session });
+    return { approvalId: input.approvalId, ...receipt, reused: false };
+  }
+
+  async function applyAdjustment(session: ClientSession, runId: string, nowMs: number) {
+    const run = await runs.findOne({ _id: runId }, { session });
+    const pending = run?.allowanceAdjustment;
+    if (!run?.execution || !pending || run.preparation) return null;
+    if (run.activeOperationId && run.status !== "blocked") {
+      const op = await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId }, { session });
+      if (!op || op.state !== "prepared" || op.dispatchStartedAtMs != null || op.reservationCount !== 0 ||
+          op.workflowRunId || op.authorizationClaim || op.resultFinalizationClaim || op.imageCompletionClaim) return null;
+      // Preserve valid prepared work and its page-batch ownership. The run
+      // revision update below fences a concurrent beginDispatch transaction.
+    }
+    const campaign = await current(session, run.execution!.campaignId, run);
+    const approval: ExecutionApprovalRecord = { approvalId: pending.approvalId, reference: pending.reference,
+      requestDigest: pending.requestDigest, predecessorApprovalId: campaign.approvals.at(-1)!.approvalId,
+      previousTotals: campaign.allowance, totals: pending.totals, reason: "operator_adjustment", channel: "operator_http",
+      pendingRequestDigest: null, runRevision: run.revision, campaignRevision: campaign.revision + 1, grantedAtMs: nowMs };
+    approval.adjustmentReceipt = pending.receipt;
+    const changed = await campaigns.updateOne({ _id: campaign._id, schemaVersion: "execution_v1", revision: campaign.revision },
+      { $set: { allowance: pending.totals, updatedAtMs: nowMs }, $push: { approvals: approval }, $inc: { revision: 1 } }, { session });
+    if (changed.modifiedCount !== 1) stale("Allowance changed before adjustment.");
+    const saved = await runs.findOneAndUpdate({ _id: run._id, revision: run.revision }, { $set: {
+      allowanceAdjustment: null, limits: { text: pending.totals.textCalls, image: pending.totals.imageCalls, steps: pending.totals.steps },
+      ...(pending.resume && !run.safeFailure && !["completed", "failed"].includes(run.status)
+        ? { status: "queued" as const, pauseRequested: false } : {}),
+      updatedAtMs: nowMs }, $inc: { revision: 1 } }, { session, returnDocument: "after" });
+    if (!saved) stale("Run changed before adjustment.");
+    return saved;
+  }
+
   return { current, create, claimRun, check, pause, reserveText, countImage, settleText,
-    reserveRealImage, settleRealImage, approve, decline };
+    reserveRealImage, settleRealImage, approve, decline, adjust, applyAdjustment };
 }

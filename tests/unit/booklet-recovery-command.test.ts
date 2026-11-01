@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/db/client", () => ({ getDatabase: () => {
   if (mocks.entryErrors.database) throw mocks.entryErrors.database;
-  return { close: mocks.close, collections: { experiment_runs: { findOne: async () => ({ execution: mocks.execution ? {} : undefined }) }, deployment_control: { findOne: async () => {
+  return { close: mocks.close, collections: { experiment_operations: { findOne: async () => ({ providerKind: "text" }) },
+    experiment_runs: { findOne: async () => ({ execution: mocks.execution ? {} : undefined }) }, deployment_control: { findOne: async () => {
     if (mocks.entryErrors.admission) throw mocks.entryErrors.admission;
     return { maintenance: false };
   } } } };

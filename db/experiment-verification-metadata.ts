@@ -36,7 +36,7 @@ export async function verificationMetadata(database: Database, session: ClientSe
     // Image lineage also verifies the selected J13 manager parent. Retain their
     // evidence fields, without unrelated text preparations/provider bodies.
     const operations = await database.collections.experiment_operations.find({ runId, role: { $in: ["image", "manager"] } }, { session, projection: {
-      _id: 1, runId: 1, role: 1, providerKind: 1, taskId: 1, subjectKind: 1, subjectId: 1, mode: 1,
+      _id: 1, runId: 1, role: 1, providerKind: 1, taskId: 1, subjectKind: 1, subjectId: 1, mode: 1, executionAmendmentId: 1,
       state: 1, reservationCount: 1, workflowRunId: 1, verifiedWorkflowId: 1, imageCompletionClaim: 1,
       imageRequestJson: 1, dependencyVersionIds: 1, inputFingerprint: 1, attempt: 1,
       parentWorkflowRunId: 1, resultDigest: 1, imageCompletionDigest: 1, resultJson: 1, materializationJson: 1,

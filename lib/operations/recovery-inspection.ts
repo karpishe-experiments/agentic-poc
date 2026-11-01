@@ -8,7 +8,8 @@ const identifier = z.string().regex(/^[A-Za-z0-9:_-]{1,128}$/);
 const optionsSchema = z.object({
   environment: z.literal("_staging"),
   // The caller must verify eligibility and authorization before supplying exclusions.
-  validatedTargets: z.array(z.object({ runId: identifier, operationId: identifier }).strict()).max(20).default([]),
+  validatedTargets: z.array(z.object({ runId: identifier, operationId: identifier, parked: z.boolean().optional(),
+    generationJobId: identifier.optional(), generationItemId: identifier.optional() }).strict()).max(20).default([]),
   page: z.number().int().min(0).max(10_000).default(0),
   limit: z.number().int().min(1).max(50).default(5),
   nowMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
@@ -90,7 +91,10 @@ export async function inspectRecoveryWork(context: MongoDatabaseContext, input: 
     };
     const collections = context.collections;
     for (const name of ["generation_jobs", "generation_items", "execution_items", "model_calls"] as const) {
-      await inspect(name, collections[name] as unknown as Collection<RecoveryRow>, { status: "running" });
+      const excluded = name === "generation_jobs" ? options.validatedTargets.flatMap(t => t.generationJobId ? [t.generationJobId] : [])
+        : name === "generation_items" ? options.validatedTargets.flatMap(t => t.generationItemId ? [t.generationItemId] : []) : [];
+      await inspect(name, collections[name] as unknown as Collection<RecoveryRow>, { status: "running",
+        ...(excluded.length ? { _id: { $nin: excluded } } : {}) });
     }
     await inspect("card_responses", collections.card_responses as unknown as Collection<RecoveryRow>, { followupStatus: "running" });
     const runs = collections.experiment_runs as unknown as Collection<RecoveryRow>;
@@ -99,7 +103,9 @@ export async function inspectRecoveryWork(context: MongoDatabaseContext, input: 
     await inspect("preparations", runs, { preparation: { $exists: true, $ne: null }, $or: [
       { "preparation.outcome": { $ne: "failed" } }, { "preparation.unresolved": true },
     ] });
-    const runExclusions = options.validatedTargets.map(({ runId, operationId }) => ({ _id: runId, activeOperationId: operationId }));
+    const runExclusions = options.validatedTargets.map(({ runId, operationId, parked }) => parked
+      ? { _id: runId, activeOperationId: null, "imageReplacementParking.operationId": operationId }
+      : { _id: runId, activeOperationId: operationId });
     await inspect("unresolved_runs", runs, { ...(runExclusions.length ? { $nor: runExclusions } : {}), $or: [
       { activeOperationId: { $exists: true, $ne: null } }, { safeFailure: "unknown_outcome" },
     ] });

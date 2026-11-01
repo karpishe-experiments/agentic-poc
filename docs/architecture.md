@@ -4,6 +4,34 @@ This document describes the current implementation for contributors and coding a
 
 ## System boundaries
 
+Current approval-based Balanced/Real runs use the same operator allowance API
+before or after exhaustion. Proactive decisions request a safe pause, then append
+an effective allowance revision. They preserve manual pauses, counters and unknown
+liabilities. Resume grants no authority. A lost acknowledgement reuses its saved
+decision identity and receipt; callbacks cannot approve allowances.
+
+A Real image with a terminal Dify execution, expired deadline and no active owner
+can receive one explicit `image_replacement` approval. Approval verifies current
+source versions and original bytes, retains the original unknown operation and
+reservation, and creates one linked operation with a new deadline. Page-batch
+ownership moves transactionally to that operation. Completion accounting permits
+only this proved supersession; late original evidence cannot replace current
+assets or settle twice. A separate execution amendment records reviewed diagnostic
+adapter/publication changes for new operations. Historical operations retain their
+original profile and publication interpretation.
+
+External errors are retained on existing run/operation records after redaction.
+The selected-run diagnostic endpoint uses projected, twenty-operation pages;
+list cards do not load bodies or stacks. The UI renders evidence as escaped text
+and offers copy/download. Diagnostic writes cannot change a provider outcome or
+accounting. Missing historical details remain unavailable.
+
+Protected candidate recovery can park a proved terminal unknown image for
+deployment. It closes no charge and grants no replacement. It preserves creative
+records, page-batch state and accounting; its checkpoint verifies the exact
+retained inventory. The normal drain exempts only an approved superseded image,
+not an unapproved parked attempt.
+
 The authenticated campaign list exposes unused execution grants for the selected
 persona and current technical profile. It uses projected, five-row pages and does
 not create or claim a grant. The runner can select a saved grant after a refresh

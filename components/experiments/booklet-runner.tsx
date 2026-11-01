@@ -11,6 +11,8 @@ import type { ExperimentPageBatch } from "@/lib/contracts/experiment-page-batche
 import { PageBatchSelector, type PageSelection } from "./page-batch-selector";
 import { AllowanceReview, type AllowanceView, type PendingAllowance } from "./allowance-review";
 import { SavedAllowanceGrants } from "./saved-allowance-grants";
+import { ExternalErrorDetails } from "./external-error-details";
+import { ImageReplacementReview } from "./image-replacement-review";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { failureReasonLabels, type FailureDiagnostics } from "@/lib/contracts/experiment-failure";
 import type { ImageCapacity } from "@/lib/experiment-runner/image-capacity";
@@ -38,6 +40,9 @@ type Run = {
     runRequests: number; runMaxRequests: number; reservedMicrodollars: number; settledMicrodollars: number;
     remainingMicrodollars: number; maxMicrodollars: number; countChargeStatus: "verified" | "assumed"; invoiceCostAvailable: false };
   executionAllowance?: AllowanceView | null; pendingApproval?: PendingAllowance | null;
+  imageReplacementApprovals?: { approvalId: string; operationId: string; replacementOperationId: string; reference: string }[];
+  imageReplacementParking?: { operationId: string } | null;
+  allowanceAdjustment?: { approvalId: string; totals: AllowanceView["totals"]; requestedAtMs: number } | null;
   limits: { text: number; image: number; steps: number }; currentArtifacts?: Artifact[];
   pendingDecision?: unknown; nextNarrativeTask?: string | null; safeFailure?: string | null; activeOperationId?: string | null;
   retainedDecisionContinuation?: boolean;
@@ -56,20 +61,23 @@ type Run = {
   pageBatch?: ExperimentPageBatch;
   preparation?: { identity: string; startedAtMs: number; deadlineAtMs: number; unresolved: boolean } | null;
 };
-type Envelope<T> = { data?: T; error?: { code: string; message: string } };
+type Envelope<T> = { data?: T; error?: { code: string; message: string; diagnostic?: unknown } };
 type Mode = "simulated" | "balanced" | "real";
 const retainedDecisionControl = (state: Pick<Run, "status" | "safeFailure" | "generationStatus" | "activeOperationId" | "preparation" | "retainedDecisionContinuation">) =>
   state.retainedDecisionContinuation === true && state.status === "blocked" && state.safeFailure === "definite_failure" &&
   state.generationStatus === "in_progress" && !!state.activeOperationId && !state.preparation;
 type PendingCreate = { persona: Persona; mode: Mode; key: string; predecessorRunId?: string; executionCampaignId?: string };
 class RunnerRequestError extends Error {
-  constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
+  constructor(message: string, readonly status: number, readonly code?: string, readonly diagnostic?: unknown) { super(message); }
 }
-function safeMessage(error: unknown, fallback: string) { return error instanceof RunnerRequestError ? error.message : fallback; }
+function safeMessage(error: unknown, fallback: string) {
+  return error instanceof RunnerRequestError ? `${error.message}${error.diagnostic ? `\n${JSON.stringify(error.diagnostic, null, 2)}` : ""}` :
+    error instanceof Error ? `${fallback}\n${error.name}: ${error.message}` : fallback;
+}
 
 async function read<T>(response: Response): Promise<T> {
   const envelope = await response.json() as Envelope<T>;
-  if (!response.ok || envelope.data === undefined) throw new RunnerRequestError(envelope.error?.message ?? "The runner request could not be completed.", response.status, envelope.error?.code);
+  if (!response.ok || envelope.data === undefined) throw new RunnerRequestError(envelope.error?.message ?? "The runner request could not be completed.", response.status, envelope.error?.code, envelope.error?.diagnostic);
   return envelope.data;
 }
 const format = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -117,7 +125,8 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
   const controlInFlight = useRef(false);
   const mutationDisabled = busy || uncertainRuns.length > 0;
   const [loading, setLoading] = useState(true);
-  const pollBusy = useRef(false);
+  const pollBusy = useRef<number | null>(null);
+  const refreshSequence = useRef(0);
   const alive = useRef(true);
   const activeRows = useRef(true);
   const [page, setPage] = useState(0);
@@ -125,13 +134,14 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
   const hasActiveRows = runs.some(row => row.status === "queued" || row.status === "running" || !!row.activeOperationId || row.preparation?.unresolved);
 
   const refresh = useCallback(async (signal?: AbortSignal, force = false) => {
-    if (pollBusy.current && !force) return false;
+    if (pollBusy.current !== null && !force) return false;
     const epoch = controlEpoch.current;
-    pollBusy.current = true;
+    const sequence = ++refreshSequence.current;
+    pollBusy.current = sequence;
     try {
       const response = await fetch(focusedRunId ? `/api/experiments/booklet-runs/${encodeURIComponent(focusedRunId)}` : `/api/experiments/booklet-runs?view=summary&page=${page}`, { cache: "no-store", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
       const result = focusedRunId ? { runs: [await read<Run>(response)], hasMore: false } : await read<{ runs: Run[]; hasMore: boolean }>(response);
-      if (epoch !== controlEpoch.current || controlInFlight.current) return false;
+      if (signal?.aborted || sequence !== refreshSequence.current || epoch !== controlEpoch.current || controlInFlight.current) return false;
       // A stale read must not replace a control acknowledgement or its retained details.
       const next = result.runs;
       const freshIds = next.filter(row => row.revision >= (latestRuns.current.get(row.runId)?.revision ?? -1)).map(row => row.runId);
@@ -153,8 +163,8 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
       }
       return next.every(row => freshIds.includes(row.runId));
     } catch (caught) {
-      if (alive.current && epoch === controlEpoch.current && !controlInFlight.current && !(caught instanceof DOMException && caught.name === "AbortError")) { setLoadError(safeMessage(caught, "The runner request could not be completed.")); setLoading(false); }
-    } finally { pollBusy.current = false; }
+      if (alive.current && !signal?.aborted && sequence === refreshSequence.current && epoch === controlEpoch.current && !controlInFlight.current && !(caught instanceof DOMException && caught.name === "AbortError")) { setLoadError(safeMessage(caught, "The runner request could not be completed.")); setLoading(false); }
+    } finally { if (pollBusy.current === sequence) pollBusy.current = null; }
     return false;
   }, [focusedRunId, page]);
 
@@ -162,8 +172,8 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
     alive.current = true;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => { await refresh(controller.signal); if (!controller.signal.aborted && activeRows.current) timer = setTimeout(poll, 5000); };
-    void poll();
+    const poll = async (initial = false) => { await refresh(controller.signal, initial); if (!controller.signal.aborted && activeRows.current) timer = setTimeout(() => void poll(), 5000); };
+    void poll(true);
     return () => { alive.current = false; controller.abort(); if (timer) clearTimeout(timer); };
   }, [refresh, hasActiveRows]);
 
@@ -367,7 +377,17 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
       {focusedRunId ? <>
       {run.pendingApproval && run.executionAllowance ? <AllowanceReview key={`${run.pendingApproval.requestDigest}:${run.executionAllowance.revision}`} runId={run.runId} runRevision={run.revision}
         pending={run.pendingApproval} allowance={run.executionAllowance} onSaved={() => refresh(undefined, true)} /> : null}
+      {run.allowanceAdjustment ? <p>Saved allowance decision {run.allowanceAdjustment.approvalId}: {dollars(run.allowanceAdjustment.totals.maxMicrodollars)} total, waiting for the next safe checkpoint.</p> : null}
+      {!run.allowanceAdjustment && !run.pendingApproval && run.executionAllowance && !["completed", "failed"].includes(run.status) ? <details><summary>Review run allowance</summary>
+        <AllowanceReview key={`adjust:${run.executionAllowance.revision}`} runId={run.runId} runRevision={run.revision}
+          allowance={run.executionAllowance} onSaved={() => refresh(undefined, true)} /></details> : null}
       <details className="text-sm text-[var(--muted-ink)]"><summary className="cursor-pointer">Run identifiers</summary><div className="mt-2 space-y-1 break-all"><p>Run {run.runId}</p>{run.bookletId ? <p>Booklet {run.bookletId}</p> : null}<p>Revision {run.revision}</p></div></details>
+      <ExternalErrorDetails key={run.runId} runId={run.runId} />
+      {run.status === "blocked" && run.safeFailure === "unknown_outcome" && (run.activeOperationId || run.imageReplacementParking?.operationId) &&
+        run.operationHistory?.some(op => op.id === (run.activeOperationId || run.imageReplacementParking?.operationId) && op.role === "image") ?
+        <ImageReplacementReview key={run.activeOperationId || run.imageReplacementParking?.operationId} runId={run.runId} operationId={(run.activeOperationId || run.imageReplacementParking?.operationId)!}
+          onSaved={() => refresh(undefined, true)} /> : null}
+      {run.imageReplacementApprovals?.length ? <p>{run.status === "completed" ? "Completed with an approved replacement." : "An image replacement was approved; completion remains pending."} Historical unknown liability remains disclosed.</p> : null}
       {run.pendingDecision ? <section aria-label="Saved decision"><h4 className="font-semibold">Saved decision</h4><p>The tester will resolve the saved creator decision when execution continues.</p></section> : null}
       <h4 className="font-semibold">Saved pages and artifacts</h4>
       {run.pageSelection ? <PageBatchSelector key={`${run.runId}:${run.pageSelection.layoutVersionId}:${run.pageSelection.pages.map((page) => `${page.pageBibleVersionId}:${page.previousPageVersionId}`).join(",")}`}

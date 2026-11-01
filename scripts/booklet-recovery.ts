@@ -9,6 +9,7 @@ import dataContract from "@/db/deployment-contract.json";
 import { withOperationBudget, operationBudgetRemainingMs } from "@/lib/operations/budget";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import { createExecutionTextFailureRecovery } from "@/lib/operations/execution-text-recovery";
+import { createImageReplacementParkingRecovery } from "@/lib/operations/image-replacement-parking";
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery, recoveryDigest, inspectStep,
   type RecoverySnapshot } from "@/lib/operations/booklet-recovery";
 
@@ -47,7 +48,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
-      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "image-replacement-parking", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = await inspectStep("environment", async () => getServerEnv());
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -68,6 +69,8 @@ async function main() {
   if (!profile.enabled) throw new BookletRecoveryError("configuration_invalid");
   const service = await inspectStep("recovery_service", async () => {
     const run = await database!.collections.experiment_runs.findOne({ _id: target.runId }, { projection: { execution: 1 } });
+    const operation = await database!.collections.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }, { projection: { providerKind: 1 } });
+    if (run?.execution && operation?.providerKind === "image") return createImageReplacementParkingRecovery({ database: database!, config: profile.config });
     return run?.execution ? createExecutionTextFailureRecovery({ database: database!, config: profile.config })
       : createBookletRecovery({ database: database!, config: profile.config });
   });

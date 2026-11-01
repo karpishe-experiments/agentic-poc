@@ -6,6 +6,41 @@
 For this milestone, "uninterrupted" means no manual data or output repair.
 A recorded operator approval that extends a finite allowance may pause and
 continue the same run; that approval alone does not invalidate acceptance.
+Under the approved replacement policy, a run may also finish as **completed with
+an approved replacement**. The original unknown charge remains reserved and
+disclosed. This is an explicit new operation, not a retry of the original call
+or a manual data/output repair. Provider-log access can reconcile the original
+charge but is not a prerequisite for this approved replacement.
+
+## Reusable approvals and diagnostics implementation checkpoint — 2026-11-01
+
+The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`, with eight saved
+images and one missing final page. Its original allowance remains USD5. The
+retained estimate is USD0.561311 settled plus USD4.438689 reserved; reserved
+liability is not a verified invoice charge. No increase or replacement is yet
+authorized by this implementation request.
+
+The implementation extends the current allowance ledger for proactive and
+repeated finite increases on all eligible Balanced/Real runs. Active work reaches
+a safe checkpoint; a manual pause remains paused. A budget-only decision cannot
+clear an unknown outcome. A separate image-replacement approval retains the
+original hold and creates one linked operation after exact source/owner checks.
+Diagnostic-only execution amendments preserve original profile snapshots.
+
+Local proof includes a disposable-persistence Kid journey through deployment
+parking, concurrent identical approval, replacement storage, nine original image
+objects, both reports and accounting with the original hold. Late original
+evidence cannot overwrite the replacement. The allowance ledger's 25 tests and
+the adapters' 21 image / 14 text-report tests passed. The 27 page-batch tests
+include amended pause/clarification bindings. Three isolated browser flows cover
+allowance review, blocked diagnostics and recovered completion without provider
+traffic. Both Linux deployment suites, CI-level ShellCheck and typecheck passed.
+Two independent source reviews are clean. Live publication, final readiness pins,
+deployment verification and the exact live replacement grant remain pending.
+
+Credential inventory impact: no new credential names, storage or transfer paths.
+Existing runtime credentials are used only by their existing consumers; error
+capture removes credential values and signed URL tokens before retention.
 
 Track private setup, any new reset and campaign permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
@@ -386,15 +421,15 @@ nodes, zero reported tokens and no other provider node or retry. The frozen
 tester publication omitted `response_format` and `json_schema`. The pinned dev6
 adapter rejects those missing parameters before SDK/client construction, counting
 or generation. This is a report workflow defect; generation and saved images
-remain intact. The application still retains unresolved report ownership.
-Neither report has completed, so Kid acceptance remains blocked.
+remain intact. Protected recovery subsequently closed the failed report ownership,
+as recorded below. Neither report has completed, so Kid acceptance remains blocked.
 
 The local correction supplies the actual prepared schema to all three tester
 report nodes and the judge. The generated graph-to-adapter fake-provider check
 passes all four cases and reproduces the old rejection before client construction.
 The corrected publications and readiness manifest are recorded below. Protected
-closure and staging delivery remain pending. Do not rebind the retained run, replay its report or
-start another paid run under its consumed grant.
+closure and staging delivery completed on 2026-11-01. Do not rebind the retained
+run, replay its report or start another paid run under its consumed grant.
 
 The saved-grant UI correction lists persisted unused grants through the existing
 authenticated campaign API. Selection does not grant or start work. Start remains
@@ -416,8 +451,9 @@ match the zero-token, eight-step guard and no output. The transaction retains th
 missing-wrapper observation, full report reservation, all other liabilities,
 generation, current sources, counters and original deadline/stop history. It only
 closes failed ownership and requests Pause. Its separate snapshot scope supports
-lost-acknowledgement and repeated verification. This candidate has not yet been
-applied live. It does not satisfy either required report or authorize another run.
+lost-acknowledgement and repeated verification. Protected apply `41290637910`
+completed after preview `41290543299` and the operator's stable revision 318.
+It does not satisfy either required report or authorize another run.
 
 ### Report publication selection - 2026-10-31
 
@@ -447,8 +483,46 @@ Only these four publication identities changed. Models, prices, adapters,
 transport settings, retries and all other publications remain unchanged.
 Recovery tests use the frozen prior-readiness fixture to retain both historical
 profile hashes. No saved live run is rewritten, and no grant is created by this
-selection. Next: deliver this exact bundle through protected closure and normal
-staging deployment, then verify browser readiness before any paid execution.
+selection.
+
+### Current delivery checkpoint - 2026-11-01
+
+Protected recovery request `m5-report-closure-20261101-v1` completed and retained
+backup `staging-recovery-m5-report-closure-20261101-v1`. Staging PR #324 then merged
+as `c4c01add6f356817178845a4fb61e48c4559784e`, with the same reviewed source tree
+`5417a70230d6e13be0aa267076d5d0dedf1e81ef` as the recovered candidate.
+
+Deploy workflow `41291762517` built image
+`sha256:29e1005586405cb05d846cc53789dd2d8814087d45de291dc568e567043aa7bd`.
+Its client observer expired while the host continued. No stop or replay was sent.
+Read-only status `41292977514` verified host request `41291762517-1` complete and
+archived. Check deployment `41293033536` passed.
+
+Authenticated native Chrome readback subsequently verified the retained run and
+unchanged accounting. Browser input remained unreliable, so the operator used the
+normal UI to record and start the separately approved one-run USD 5 grant.
+Run `6f1c5716-9f27-4714-88fd-989c196b7a04`, booklet
+`19bd33c4-00e1-4661-840d-3aa35391c986`, links the preceding failed Kid. It started
+at 10:00:18 UTC on 2026-11-01 with 120 text calls, 12 images, 300 steps, revisions
+1/1, no-progress window 3, zero automatic retries and zero further successors.
+Readback verified J01–J12 approvals, all five source images, and the cover and
+first two final pages. The last page image operation
+`3e5901ff-b688-40ec-a237-5dd7ec4d04f3`, Dify run
+`87018809-52dd-432b-beee-526ca7b780d4`, returned `unknown_outcome` after provider
+dispatch. Its adapter returned no output or usage after 188.814 seconds. The
+workflow's subsequent missing-upload-receipt error does not prove that the
+provider did no paid work. The saved provider exception path retains neither
+exception classification nor a request ID. No retry was sent.
+
+The run remains blocked with 43 text calls, 9 image calls and 52 steps;
+USD 0.561311 estimated settled and USD 4.438689 reserved. The reservation is not
+settled expenditure. Provider-side reconciliation can resolve the original
+charge. Alternatively, the amended policy above permits one explicitly approved
+replacement while retaining that liability. Ordinary Resume or a budget increase
+alone cannot authorize replacement or resolve this outcome.
+Kid acceptance still requires the last final page and both reports. Documentation
+consolidation and the separate efficiency/quality comparison branch follow the
+first completed Kid. The later comparison run requires its own finite authority.
 
 ### Historical carry-forward review before the M4 exit
 
@@ -592,7 +666,8 @@ authorization and exhausted limits remain technical blockers.
    observes. Do not manually repair this run and retain it as uninterrupted.
 2. Observe saved status and trace IDs periodically. When a call exceeds observation
    time, inspect the same task; do not start another run/call. An uncertain paid
-   result must be recovered or conclusively resolved before another request.
+   result must be recovered, conclusively resolved, or explicitly superseded by
+   one recorded image-replacement approval before another request for that target.
 3. On completion verify all 9 initial required assets (or their current revised
    replacements), cover + 3 pages, approved exact versions, reports, actual byte
    retrieval, counts within caps and no operator repair. Browser-inspect saved
@@ -603,7 +678,8 @@ authorization and exhausted limits remain technical blockers.
    campaign authority. Start a linked successor only within authorized allowance.
    An approval-only allowance pause may continue the same run after a specific
    recorded grant; it cannot repair saved data/output or resolve an unknown call.
-5. Advance only after an uninterrupted successful Kid run. Repeat for Parent
+5. Advance only after an accepted Kid run, including an explicitly labelled
+   completion with an approved replacement. Repeat for Parent
    5 pages (11 initial outputs, one two-panel page), then Creator 8 pages
    (15 initial outputs, at least two multi-panel pages).
 6. Extend a finite allowance only through its recorded operator approval; never
