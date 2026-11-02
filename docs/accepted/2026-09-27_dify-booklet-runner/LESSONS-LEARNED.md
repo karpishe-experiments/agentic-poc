@@ -23,6 +23,18 @@ review page, style and sheet readers together when continuation states change.
 Promotion candidate: **Documentation** for integration-test boundaries and
 operation-specific execution configuration.
 
+### Separate provider execution from completion observation
+
+The M5 tester completed remotely and its usage settled, but its first result
+transaction entered with only2091ms remaining. Short inspection windows then
+repeatedly expired during database readback. A provider success is not proof that
+the application saved its report. Give existing-work reconciliation a separate,
+finite I/O window without changing the provider deadline, reservation or request
+identity. Keep the finalization lease and source/accounting checks. The Real
+journey regression verifies a failed save, slow observation, no additional
+provider start, and completion through both reports. Promotion candidate:
+**Documentation** for asynchronous completion and recovery boundaries.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the

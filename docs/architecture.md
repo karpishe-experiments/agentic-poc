@@ -437,8 +437,13 @@ Authorization, text and image ownership cleanup use the independent five-second
 cleanup budget and exact claim identity, including lost claim acknowledgements.
 Image cleanup covers every post-claim exit and preserves original bytes/digest.
 Sanitized failure diagnostics retain the original stage, error kind, repository
-code, timing, remaining budget and cleanup outcome. Interactive Inspect/Stop keep
-their existing 20/30-second budgets. Exact granted maintenance completion recovery reuses
+code, timing, remaining budget and cleanup outcome. Inspect/Stop use a bounded
+120-second reconciliation window inside a 130-second request budget; their browser
+observer waits up to 135 seconds. This permits database verification and saved-result
+materialization after a provider deadline expires. It does not renew that deadline,
+change the 60-second finalization lease, enlarge individual transport bounds, or
+authorize a provider POST. Parent request budgets still constrain nested work.
+Exact granted maintenance completion recovery reuses
 its same-invocation authenticated GET after full post-observation preservation
 proof and fresh eligibility/admission checks. Its internal dispatcher entry checks
 the bounded context, grant, revision, operation and response identity before using
