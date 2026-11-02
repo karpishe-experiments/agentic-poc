@@ -203,6 +203,12 @@ are stored outside the failed transaction and can change its full-row snapshot;
 their effect on this abort must be proved without deleting or ignoring them.
 No additional image is authorized.
 
+The diagnostic abort candidate reconstructs only appended save diagnostics in
+memory and requires the complete original preview digest. Its host helper is
+pinned separately from the interrupted recovery candidate and must have identical
+schema fingerprints. Until this proof and normal prior-app readiness pass live,
+restoration remains unproved. No report or accounting write is part of this path.
+
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error
 capture removes credential values and signed URL tokens before retention.

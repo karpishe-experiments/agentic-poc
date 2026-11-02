@@ -8,7 +8,7 @@ if [[ $# -eq 0 ]]; then
   for scenario in candidate-recovery-prebackup-apply candidate-recovery-prebackup-drift candidate-recovery-prebackup-resume candidate-recovery-prebackup-active candidate-recovery-prebackup-advanced candidate-recovery-prebackup-unsupported; do
     bash "$0" "$scenario"
   done
-  for scenario in recovery-response-diagnostic expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
+  for scenario in recovery-response-diagnostic expired-recovery-target-preview-drift expired-recovery-target-post-start-drift recovery-contract-compatible recovery-contract-read-error recovery-contract-malformed recovery-contract-migration recovery-contract-initialization recovery-contract-version recovery-contract-mixed expired-recovery-bridge-reentry-drift expired-recovery-bridge-apply expired-recovery-bridge-prepared expired-recovery-bridge-verify-failed recovery-compatibility-exact recovery-compatibility-identical recovery-compatibility-schema-drift recovery-compatibility-image-drift recovery-compatibility-malformed-drift recovery-compatibility-read-drift expired-recovery-handoff-apply expired-recovery-handoff-drift expired-recovery-handoff-resume recovery-inspection-failure recovery-fingerprint-new recovery-fingerprint-legacy-empty recovery-fingerprint-legacy-explicit recovery-fingerprint-drift recovery-historical-child expired-recovery-prepared claim-release-abort-postcheckpoint claim-release-abort-committed claim-release-abort claim-release-abort-changed claim-release-abort-no-child claim-release-read-error claim-release-mount claim-release-guards claim-release-preview claim-release-apply claim-release-repeat claim-release-parent-drift claim-release-running claim-release-failed-proof legacy-recovery-claims candidate-recovery-unapplied-abort candidate-recovery-unapplied-changed candidate-recovery-unapplied-diagnostic candidate-recovery-unapplied-diagnostic-changed candidate-recovery-unapplied-diagnostic-schema candidate-recovery-unapplied-diagnostic-revision candidate-recovery-unapplied-diagnostic-capability candidate-recovery-backup-abort candidate-recovery-backup-failed candidate-recovery-readiness-failed candidate-recovery-preview candidate-recovery-apply candidate-recovery-failure candidate-recovery-mismatch candidate-recovery-repeat candidate-recovery-resume expired-recovery-resume expired-recovery-preview expired-recovery-apply expired-recovery-drift bootstrap-preview bootstrap-backup-failed bootstrap-repair bootstrap-candidate backup-verify operation-control operation-control-bounds operation-stop-guard operation-oneoff-guard operation-unit-bounds operation-budget operation-maintenance-bounds operation-client-timeout operation-progress operation-output-inspection operation-compose-bounds drain-bootstrap release first-release rollback-on-readiness maintenance-preserves-rollback backup-history operation-result operation-result-failed secret-rotation interrupted-secret-rotation stale-infrastructure secret-serialization secret-prompt secret-schema booklet-runner-staging community-probe-staging first-activation-secret-repair preactivation-secret-repair dispatch-rejection journal-retention reset-profile reset-recovery reset-guard plan-guard index-retirement index-retirement-resume index-retirement-rollback index-finalize-before index-finalize-after index-admission-race index-drain-resume; do
     bash "$0" "$scenario"
   done
   bash "$0" backup-handoff-closed-admission
@@ -490,12 +490,13 @@ LEGACY_CLAIMS
     verify_application() { printf 'verify %s\n' "$1" >> "$CALLS"; [[ "$scenario" != candidate-recovery-readiness-failed ]]; }
     docker() {
       printf 'docker %s\n' "$*" >> "$CALLS"
+      if [[ "$scenario" == candidate-recovery-unapplied-diagnostic-revision && -n "$ABORT_PROOF_IMAGE" && "$*" == *"$ABORT_PROOF_IMAGE"* && "$*" != *source-tree* && "$1:$2" == image:inspect ]]; then printf '%040d\n' 9; return; fi
       if [[ "$1:$2" == image:inspect ]]; then if [[ "$*" == *source-tree* ]]; then printf '%040d\n' 3; else printf '%s\n' "$COMMIT"; fi; fi
     }
     recovery_oneoff() {
       printf 'recovery %s\n' "$3" >> "$CALLS"
       case "$3" in
-        capabilities) printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false}\n';;
+        capabilities) if [[ "$scenario" == candidate-recovery-unapplied-diagnostic-capability ]]; then printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false,"supported":[]}\n'; else printf '{"contract":"booklet-recovery-v1","environment":"_staging","schemaVersion":"1","initializationRequired":false,"supported":["diagnostic-append-unapplied"]}\n'; fi;;
         legacy-compatibility)
           printf 'verifier-image %s\n' "$(jq -r .services.app.image "$1/image.json")" >> "$CALLS"
           if [[ "$scenario" == expired-recovery-bridge-verify-failed && "$(grep -c '^recovery legacy-compatibility$' "$CALLS")" -ge 4 ]]; then return 1; fi
@@ -511,6 +512,7 @@ LEGACY_CLAIMS
             printf '{"verified":true,"scope":"decision-rejection-target-v1","providerPosts":0,"previewDigest":"%064d"}\n' 1
           else printf '{"verified":true,"previewDigest":"%064d"}\n' 1; fi;;
         verify-unapplied) if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then printf '{"verified":false,"phase":"verify-unapplied","code":"snapshot_changed"}\n'; return 1; fi; printf '{"verified":true,"outcome":"unapplied","providerPosts":0}\n';;
+        verify-diagnostic-unapplied) [[ "$scenario" != candidate-recovery-unapplied-diagnostic-changed ]] || return 1; printf '{"verified":true,"outcome":"unapplied","proof":"diagnostic_append_only","providerPosts":0}\n';;
         apply) if [[ "$scenario" == candidate-recovery-unapplied-* ]]; then printf '{"phase":"started","retained":"original"}\n' > "$2/application-recovery.json"; return 1; fi; if [[ "$scenario" == candidate-recovery-failure ]]; then printf '{"verified":false,"phase":"apply","code":"snapshot_changed","stage":"snapshot_verification","errorKind":"operation_budget_expired","elapsedMs":149000,"remainingBudgetMs":1000,"cleanupOutcome":"verified","commitState":"not_started","privateMessage":"do-not-print"}\n'; return 1; fi; printf '{"verified":true}\n';;
         *) printf '{"verified":true}\n';;
       esac
@@ -614,7 +616,12 @@ LEGACY_CLAIMS
       [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
       cp "$STATE/recoveries/$REQUEST_ID/application-recovery.json" "$TEMP_DIR/original-checkpoint.json"
       ABORT_RECOVERY=true
-      if [[ "$scenario" == candidate-recovery-unapplied-changed ]]; then
+      if [[ "$scenario" == candidate-recovery-unapplied-diagnostic* ]]; then
+        ABORT_PROOF_IMAGE="$(jq -er .image "$CONFIG_FILE")@sha256:$(printf '%064d' 4)" ABORT_PROOF_COMMIT="$COMMIT"
+        control_timeout() { shift; "$@"; }
+        recovery_schema_digest() { if [[ "$scenario" == candidate-recovery-unapplied-diagnostic-schema && "$1" == "$ABORT_PROOF_IMAGE" ]]; then printf '%064d\n' 9; else printf '%064d\n' 2; fi; }
+      fi
+      if [[ "$scenario" == candidate-recovery-unapplied-changed || "$scenario" == candidate-recovery-unapplied-diagnostic-* ]]; then
         if (supported_recovery_host); then exit 1; fi
         [[ "$(jq -r .phase "$STATE/recoveries/$REQUEST_ID/host.json")" == reconciling ]]
         ! grep -q 'compose .*up ' "$CALLS"
@@ -624,7 +631,10 @@ LEGACY_CLAIMS
         # Interrupted abort must re-prove unchanged state, not reuse a cached verdict.
         recovery_phase "$STATE/recoveries/$REQUEST_ID/host.json" aborting-closed
         supported_recovery_host
-        [[ "$(grep -c '^recovery verify-unapplied$' "$CALLS")" == 2 ]]
+        if [[ "$scenario" == candidate-recovery-unapplied-diagnostic ]]; then
+          [[ "$(grep -c '^recovery verify-diagnostic-unapplied$' "$CALLS")" == 2 ]]
+          [[ "$(jq -r .abortProofImage "$STATE/recoveries/$REQUEST_ID/host.json")" == "$ABORT_PROOF_IMAGE" ]]
+        else [[ "$(grep -c '^recovery verify-unapplied$' "$CALLS")" == 2 ]]; fi
       fi
       cmp -s "$TEMP_DIR/original-checkpoint.json" "$STATE/recoveries/$REQUEST_ID/application-recovery.json"
       [[ "$(grep -c '^recovery apply$' "$CALLS")" == 1 ]]

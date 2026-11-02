@@ -35,6 +35,7 @@ import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { OperationBudgetExpired } from "@/lib/operations/budget";
 import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
 import { withOperationBudget } from "@/lib/operations/budget";
+import { externalError } from "@/lib/experiment-runner/external-errors";
 
 const databases: Database[] = [], roots: string[] = [];
 afterEach(async () => {
@@ -436,9 +437,22 @@ describe("Real shared journey with fake providers and durable originals", () => 
         { $set: { resultFinalizationClaim: { id: randomUUID(), expiresAtMs: Date.now() + 60_000 } } });
       await expect(recovery.preview(reportTarget)).rejects.toThrow("settled_report_ineligible");
       await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $set: { resultFinalizationClaim: null } });
-      const reportPreview = await recovery.preview(reportTarget);
+      let reportPreview = await recovery.preview(reportTarget);
       await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: true } });
       expect(await recovery.verifyUnapplied(reportTarget, reportPreview.previewDigest)).toMatchObject({ outcome: "unapplied" });
+      const saveDiagnostic = { ...externalError({ service: "booklet", stage: "result_transaction",
+        error: new OperationBudgetExpired(), elapsedMs: 60_000 }), attemptNumber: report.attempt,
+        timestamp: new Date(report.updatedAtMs + 1).toISOString() };
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $push: { externalErrors: saveDiagnostic } });
+      const diagnosticsBeforeProof = (await env.repository.getOperation(report._id))!.externalErrors;
+      await expect(recovery.verifyUnapplied(reportTarget, reportPreview.previewDigest)).rejects.toThrow("state_changed");
+      expect(await recovery.verifyDiagnosticUnapplied(reportTarget, reportPreview.previewDigest)).toMatchObject({
+        verified: true, outcome: "unapplied", proof: "diagnostic_append_only", providerPosts: 0 });
+      expect((await env.repository.getOperation(report._id))!.externalErrors).toEqual(diagnosticsBeforeProof);
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $set: { warningsJson: '["changed"]' } });
+      await expect(recovery.verifyDiagnosticUnapplied(reportTarget, reportPreview.previewDigest)).rejects.toThrow("diagnostic_append_unproved");
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $set: { warningsJson: report.warningsJson } });
+      reportPreview = await recovery.preview(reportTarget, true);
       const shortCheckpoint = vi.fn();
       await expect(withOperationBudget(Date.now() + 65_000,
         () => recovery.apply(reportTarget, reportPreview.previewDigest, shortCheckpoint)))

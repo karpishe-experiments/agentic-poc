@@ -106,6 +106,18 @@ beforeEach(() => {
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  it("limits diagnostic-only abort verification to the settled report service without checkpoint writes", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    const recoveryModule = await import("@/lib/operations/settled-report-recovery");
+    const create = vi.mocked(recoveryModule.createSettledReportRecovery);
+    const original = create.getMockImplementation()!;
+    const verifyDiagnosticUnapplied = vi.fn().mockResolvedValue({ verified: true, outcome: "unapplied",
+      proof: "diagnostic_append_only", providerPosts: 0 });
+    create.mockImplementation((...args) => ({ ...original(...args), verifyDiagnosticUnapplied }));
+    argumentsFor("verify-diagnostic-unapplied"); await import("@/scripts/booklet-recovery");
+    expect(verifyDiagnosticUnapplied).toHaveBeenCalledExactlyOnceWith({ runId: "run", operationId: "operation", expectedRevision: 2 }, digest);
+    expect(mocks.apply).not.toHaveBeenCalled(); expect(mocks.files.size).toBe(0);
+  });
   it("checkpoints a saved report as verification pending and verifies it in the separate host phase", async () => {
     mocks.execution = true; mocks.settledReport = true;
     argumentsFor("apply"); await import("@/scripts/booklet-recovery");
