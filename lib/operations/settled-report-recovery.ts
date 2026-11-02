@@ -16,6 +16,7 @@ import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-ru
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, recoveryDigest,
   type RecoverySnapshot, type RecoveryTarget } from "@/lib/operations/booklet-recovery";
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
+import { operationBudgetRemainingMs } from "@/lib/operations/budget";
 
 const scope = "settled-report-completion-v1" as const;
 const omit = (value: object, keys: string[]) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
@@ -49,8 +50,10 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
     store: () => deps.store ?? createAssetStore() });
 
   async function state(target: RecoveryTarget, completed = false) {
-    const run = await c.experiment_runs.findOne({ _id: target.runId });
-    const op = await c.experiment_operations.findOne({ _id: target.operationId, runId: target.runId });
+    const [run, op] = await Promise.all([
+      c.experiment_runs.findOne({ _id: target.runId }),
+      c.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }),
+    ]);
     proof(run?.execution && run.mode === "real" && run.generationCompletedAtMs != null && !run.preparation &&
       !run.pendingApproval && !run.allowanceAdjustment && !run.pendingDecisionJson && op && op.mode === "real" &&
       ["tester", "judge"].includes(op.role) && op.taskId === null && op.subjectKind === "book" && op.subjectId === run.bookletId &&
@@ -104,17 +107,21 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
   }
   async function snapshot(target: RecoveryTarget, completed = false): Promise<RecoverySnapshot> {
     const { run, op } = await state(target, completed);
-    const artifacts = await c.artifacts.find({ experimentRunId: run._id }).toArray();
+    const [artifacts, campaign, booklet, operations, approvals, assets, messages] = await Promise.all([
+      c.artifacts.find({ experimentRunId: run._id }).toArray(),
+      c.experiment_campaigns.findOne({ _id: run.execution!.campaignId }),
+      c.booklets.findOne({ _id: run.bookletId }),
+      c.experiment_operations.find({ runId: run._id }).toArray(),
+      c.approvals.find({ bookletId: run.bookletId }).toArray(),
+      c.assets.find({ bookletId: run.bookletId }).toArray(),
+      c.messages.find({ bookletId: run.bookletId }).toArray(),
+    ]);
     const versions = await c.artifact_versions.find({ artifactId: { $in: artifacts.map(item => item._id) } }).toArray();
-    const campaign = await c.experiment_campaigns.findOne({ _id: run.execution!.campaignId });
-    const booklet = await c.booklets.findOne({ _id: run.bookletId });
     proof(campaign && booklet, "target_missing");
-    const inventory = { experiment_runs: [run], experiment_operations: await c.experiment_operations.find({ runId: run._id }).toArray(),
+    const inventory = { experiment_runs: [run], experiment_operations: operations,
       experiment_campaigns: [campaign], booklets: [booklet], artifacts, artifact_versions: versions,
       artifact_dependencies: await c.artifact_dependencies.find({ downstreamVersionId: { $in: versions.map(item => item._id) } }).toArray(),
-      approvals: await c.approvals.find({ bookletId: run.bookletId }).toArray(),
-      assets: await c.assets.find({ bookletId: run.bookletId }).toArray(),
-      messages: await c.messages.find({ bookletId: run.bookletId }).toArray() };
+      approvals, assets, messages };
     return { scope, rows: Object.fromEntries(Object.entries(inventory).map(([name, rows]) =>
       [name, Object.fromEntries(rows.map(row => [row._id, reportDigest(row)]))])),
     runInvariant: reportDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "evaluationStatus"])),
@@ -175,11 +182,23 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
     checkpoint: (value: { contract: string; previewDigest: string; snapshot: RecoverySnapshot }) => Promise<void>) {
     const current = await preview(target, true);
     proof(current.previewDigest === expected, "preview_changed");
+    // Preserve the normal 60-second lease and leave cleanup time. A short
+    // remaining maintenance window must stop before recording write intent.
+    const remaining = operationBudgetRemainingMs();
+    proof(remaining === null || remaining >= 70_000, "insufficient_completion_budget");
     await checkpoint(current);
-    await quiet(target, true);
-    proof(recoveryDigest(await snapshot(target)) === recoveryDigest(current.snapshot), "state_changed");
-    await observe(target);
+    // Preview already checked global ownership and stable inventory around the
+    // authenticated GET in this invocation. The host keeps admission closed and
+    // the app stopped. Recheck the target and admission before normal completion;
+    // its transaction independently checks current sources and accounting.
     const { run, op, result } = await state(target);
+    proof(reportDigest(run) === current.snapshot.rows.experiment_runs[run._id] &&
+      reportDigest(op) === current.snapshot.rows.experiment_operations[op._id], "state_changed");
+    const admission = await c.deployment_control.findOne({ environment: "_staging" });
+    proof(admission?.maintenance && !admission.draining && admission.activeMutations === 0 &&
+      (admission.interruptedMutations ?? 0) === 0 && !(admission.mutationOwners ?? []).length, "admission_changed");
+    const writeRemaining = operationBudgetRemainingMs();
+    proof(writeRemaining === null || writeRemaining >= 65_000, "insufficient_completion_budget");
     await repository.completeOperation({ envelope: { runId: run._id, operationId: op._id, workflowRunId: op.workflowRunId!,
       inputFingerprint: op.inputFingerprint, result }, parentWorkflowRunId: op.parentWorkflowRunId, nowMs: now() });
     return current;
@@ -189,6 +208,6 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
     return { verified: true as const, outcome: "unapplied" as const, admission: "closed" as const, providerPosts: 0 };
   }
   const unsupported = async (): Promise<never> => { throw new BookletRecoveryError("settled_report_has_no_claim_release"); };
-  return { preview, apply, verifyCompleted, verifyUnapplied,
+  return { preview, apply, verifyCompleted, verifyUnapplied, deferCompletedVerification: true as const,
     previewClaimRelease: unsupported, applyClaimRelease: unsupported, verifyClaimRelease: unsupported };
 }

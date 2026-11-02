@@ -23,7 +23,7 @@ const inputSchema = z.strictObject({
   "evidence-dir": z.literal("/recovery").optional(), "preview-digest": sha.optional(),
   page: z.coerce.number().int().min(0).max(10000).optional(), limit: z.coerce.number().int().min(1).max(50).optional(),
 });
-const checkpointSchema = z.strictObject({ contract: z.literal(BOOKLET_RECOVERY_CONTRACT), phase: z.enum(["started", "completed"]),
+const checkpointSchema = z.strictObject({ contract: z.literal(BOOKLET_RECOVERY_CONTRACT), phase: z.enum(["started", "verification_pending", "completed"]),
   target: z.strictObject({ runId: id, operationId: id, expectedRevision: z.number().int().nonnegative() }),
   previewDigest: sha, snapshotDigest: sha, snapshot: z.custom<RecoverySnapshot>(value => !!value && typeof value === "object"),
 });
@@ -140,7 +140,10 @@ async function main() {
       recoveryDigest(prior.snapshot) !== prior.snapshotDigest) throw new BookletRecoveryError("checkpoint_mismatch");
     // Includes a process lost after commit: inspect proof, never replay the mutation.
     const result = await service.verifyCompleted(target, prior.snapshot);
-    if (prior.phase !== "completed" && input.phase === "apply") await saveCheckpoint(checkpointPath, { ...prior, phase: "completed" }, false);
+    if (prior.phase !== "completed" && (input.phase === "apply" ||
+        prior.phase === "verification_pending" && input.phase === "verify-completed")) {
+      await saveCheckpoint(checkpointPath, { ...prior, phase: "completed" }, false);
+    }
     emit({ ...result, phase, repeated: true }); return;
   }
   if (input.phase !== "apply") throw new BookletRecoveryError("checkpoint_missing");
@@ -149,6 +152,15 @@ async function main() {
       snapshotDigest: recoveryDigest(proof.snapshot), snapshot: proof.snapshot };
     await saveCheckpoint(checkpointPath, checkpoint, true);
   });
+  if ("deferCompletedVerification" in service && service.deferCompletedVerification === true) {
+    // Normal report completion committed. Full current-byte/accounting proof is
+    // a separate existing host phase with its own bounded I/O window. This
+    // receipt cannot establish host completion or a deployment handoff.
+    await saveCheckpoint(checkpointPath, { contract: BOOKLET_RECOVERY_CONTRACT, phase: "verification_pending", target,
+      previewDigest: preview.previewDigest, snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot }, false);
+    emit({ verified: true, phase, outcome: "report_saved_verification_pending", admission: "closed", providerPosts: 0,
+      runId: target.runId, operationId: target.operationId, repeated: false }); return;
+  }
   const result = await service.verifyCompleted(target, preview.snapshot);
   await saveCheckpoint(checkpointPath, { contract: BOOKLET_RECOVERY_CONTRACT, phase: "completed", target, previewDigest: preview.previewDigest,
     snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot }, false);
