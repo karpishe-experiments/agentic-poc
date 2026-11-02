@@ -795,6 +795,19 @@ uses the shared closure transaction with accounting verification before commit.
 The existing private checkpoint owns interruption reconciliation. Legacy M4
 recovery and host orchestration retain their existing interpretation.
 
+The same entrypoint supports `settled-report-completion-v1` for a terminal,
+successful Real tester or judge whose usage has settled but whose report save
+failed. Preview verifies the original Dify wrapper with GET, the saved operation
+configuration, source-record snapshots and a stable target revision. Apply requires
+closed quiet admission, an expired provider deadline and no completion owner.
+It validates current sources and original bytes through the normal
+report-completion repository transaction and leaves the run
+paused. It cannot dispatch provider work. Snapshot proofs include decimal cost
+estimates without changing historical M4 wire hashes. Verification preserves
+other operations, approved replacement liabilities, creative records and counters.
+Repeated completion verification reads current reference and final bytes again;
+the existing private checkpoint resolves interrupted acknowledgements.
+
 The same protected entrypoint supports one exact retained Real tester report
 that failed at the dev6 parameter guard before client construction. Its reviewed
 attestation pins the original run, immutable publication, failed node, disabled

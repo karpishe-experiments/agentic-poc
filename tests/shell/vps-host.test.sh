@@ -201,6 +201,7 @@ RuntimeMaxUSec=infinity'; do
         mixed)
           printf '{"diagnostic":"recovery_read","operation":"target_state","elapsedMs":1,"remainingBudgetMs":1,"returnedRows":1,"returnedBytes":1}\n'
           callback_fixture
+          callback_fixture | jq '.phase="result_transaction"'
           printf '{"verified":true,"phase":"preview","previewDigest":"original-proof"}\n'
           printf '{"diagnostic":"deployment_read","phase":"cleanup","operation":"database_close","outcome":"completed","elapsedMs":1,"remainingBudgetMs":null,"returnedRows":0}\n'
           ;;

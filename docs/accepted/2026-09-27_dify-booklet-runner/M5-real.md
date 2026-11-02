@@ -14,11 +14,13 @@ charge but is not a prerequisite for this approved replacement.
 
 ## Reusable approvals and diagnostics implementation checkpoint — 2026-11-01
 
-The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`, with eight saved
-images and one missing final page. Its initial allowance was USD5. The
-retained estimate is USD0.561311 settled plus USD4.438689 reserved; reserved
-liability is not a verified invoice charge. The accepted allowance amendment and
-replacement result are recorded below.
+The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`. The approved
+replacement saved its missing final page; tester materialization and judge
+completion remain blocked. Its initial allowance was USD5 and its accepted
+total is USD10. The earlier image liability remains reserved and is not a
+verified invoice charge. The retained tester cost snapshot estimates USD5.092238
+of total exposure, including reserved liability. Final accounting and all nine
+current image-byte checks remain acceptance requirements.
 
 The implementation extends the current allowance ledger for proactive and
 repeated finite increases on all eligible Balanced/Real runs. Active work reaches
@@ -171,6 +173,16 @@ cost snapshot. The local correction gives existing-work reconciliation120 second
 with aligned130-second API and135-second browser bounds. It preserves provider
 deadlines, finalization leases, reservations and the no-replay contract. This
 correction is not yet evidence of live completion.
+
+The protected candidate path also supports completing this retained settled
+report through the normal repository transaction. Its scoped snapshot includes
+decimal cost estimates, current creative records and approved image-replacement
+proofs. It requires fresh original-execution readback, a stable revision, closed
+quiet admission and absent save owners. It preserves the provider deadline,
+counters and old image hold and leaves the run paused. The local replacement
+journey verifies recovery after a report-save failure, repeated verification and
+normal completion of both reports without another provider request for the
+retained tester. This path still requires review and live delivery.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error
