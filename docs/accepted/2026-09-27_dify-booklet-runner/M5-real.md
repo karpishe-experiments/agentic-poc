@@ -108,8 +108,30 @@ reports and final accounting. All 64 focused unit/UI tests, typecheck and
 focused lint pass. All eight affected Real journeys pass, including legacy
 replacement behavior, Parent and Creator cases. Two isolated Chrome checks pass
 for unknown and unclaimed failures; each submits exactly one approval request
-against fake APIs. Two independent final reviews are clean. The extension is
-not deployed and grants no live attempt.
+against fake APIs. Two independent final reviews are clean. Source PR #329
+merged as `b7a52cb2461fa57aca252d6675161e1c082b7f61`; staging PR #330 merged
+as `8eb1cd743bcb7dff29d045570457a9fc4967c2de`. Both CI runs passed.
+
+Deployment `41414789192` timed out only in its client observer while the same
+host request continued. Exact status `41416516841` proves
+`41414789192-1` completed and archived, with image
+`sha256:b22e4a33f21dc5b61aafaab7d04361df62628ac763fdcc3b5cd75f39c9bc2db0`
+and backup `staging-20261102T084441Z-bf5cef7e6534c03f`. No replay occurred.
+The first queued Check encountered HTTP502 during the active host operation;
+independent Check `41416624549` passed after host completion. A further
+image-attempt approval and live completion remain pending.
+
+The live preview then rejected the failed attempt with "Sheet assembly requires
+idle work with an image policy." No provider call occurred. The earlier fixture
+had failed the cover, so it checked style evidence but not referenced sheets.
+The revised regression requires a story image with original reference bytes and
+reproduced the same rejection. The correction permits read-only sheet verification
+under the existing proven unclaimed-failure predicate, matching the style reader;
+assembly writes and dispatch eligibility remain unchanged. All eight affected
+Real journeys, 21 focused unit tests, typecheck and focused lint pass. Two
+independent code reviews are clean. All ten sheet assembly tests also pass after
+replacing a stale message assertion with its rejection code.
+This correction is not yet deployed.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error
