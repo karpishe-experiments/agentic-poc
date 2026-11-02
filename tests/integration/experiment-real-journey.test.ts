@@ -81,6 +81,7 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   let reviseSheet = false;
   let revisedVersionId: string | null = null;
   let imageFailure: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome" | null = null;
+  let imageFailureNeedsReferences = false;
   let rejectImageAuthorization = false;
   let reportStatus = "completed";
   let imageFailureTask: "J13" | null = null;
@@ -120,7 +121,8 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
       let outputs: Record<string, unknown>;
       if (binding.role === "image") {
         expect(claim.realImageRequest).toBeDefined();
-        if (imageFailure && (!imageFailureTask || operation.taskId === imageFailureTask)) {
+        if (imageFailure && (!imageFailureTask || operation.taskId === imageFailureTask) &&
+            (!imageFailureNeedsReferences || claim.realImageRequest!.references.length > 0)) {
           const failure = imageFailure; imageFailure = null;
           await repository.observeRealImage({ ...identity, inputFingerprint: operation.inputFingerprint,
             result: { schemaVersion: "booklet_real_image_result_v1", requestDigest: claim.realImageRequest!.requestDigest,
@@ -248,8 +250,8 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
     unknownReportOutcome: () => { reportStatus = "unknown"; },
     inspect: (operationId: string) => createExperimentDispatcher({ database, config, runtime, store: () => store,
       mutate: async fn => fn(), now }).inspect({ runId, operationId }),
-    failNextImage: (status: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome", task: "J13" | null = null) => {
-      imageFailure = status; imageFailureTask = task;
+    failNextImage: (status: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome", task: "J13" | null = null, requireReferences = false) => {
+      imageFailure = status; imageFailureTask = task; imageFailureNeedsReferences = requireReferences;
     },
     reviseNextSheet: () => { reviseSheet = true; }, revisedVersion: () => revisedVersionId };
 }
@@ -266,7 +268,7 @@ async function advance(env: Awaited<ReturnType<typeof setup>>, step: number) {
 describe("Real shared journey with fake providers and durable originals", () => {
   it.each([false, true])("replaces one explicitly approved unknown image and completes Kid (authorization failure=%s)", async authorizationFailure => {
     const env = await setup("playful_kid", "execution_v2");
-    env.failNextImage("unknown_outcome", "J13");
+    env.failNextImage("unknown_outcome", "J13", true);
     for (let step = 0; step < 180; step++) {
       await env.advance();
       if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
@@ -274,6 +276,7 @@ describe("Real shared journey with fake providers and durable originals", () => 
     const blocked = (await env.repository.getRun(env.runId))!;
     const original = (await env.repository.getOperation(blocked.activeOperationId!))!;
     expect(original).toMatchObject({ state: "unknown", realImageObservation: { chargeBasis: "unknown_outcome" } });
+    expect(JSON.parse(original.realImagePreparation!.requestJson).references.length).toBeGreaterThan(0);
     const retained = structuredClone(original.realImageReservation);
     const calls = vi.mocked(env.runtime.start).mock.calls.length;
     await expect(env.replacementService().preview(env.runId, original._id)).rejects.toThrow();

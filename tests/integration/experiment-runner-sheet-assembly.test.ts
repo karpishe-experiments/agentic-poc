@@ -83,7 +83,7 @@ describe("saved sheet assembly", () => {
     expect((await env.service().assemble(env.input)).reused).toBe(true);
     expect((await env.repository.getRun(env.input.runId))!.counters).toEqual(retained.counters);
     await env.database.collections.experiment_runs.updateOne({ _id: env.input.runId }, { $set: { configurationHash: "0".repeat(64) } });
-    await expect(env.service().assemble(env.input)).rejects.toThrow("simulated image policy");
+    await expect(env.service().assemble(env.input)).rejects.toMatchObject({ code: "invalid_state" });
     await env.database.collections.experiment_runs.updateOne({ _id: env.input.runId }, { $set: { configurationHash: retained.configurationHash } });
     env.store.files.set([...env.store.files.keys()][0], new Uint8Array([1]));
     await expect(env.service().assemble(env.input)).rejects.toMatchObject({ code: "invalid_state" });

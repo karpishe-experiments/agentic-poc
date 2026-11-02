@@ -1,4 +1,5 @@
 import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
+import { isUnclaimedImageFailure } from "@/lib/experiment-runner/image-pre-provider-failure";
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
@@ -58,7 +59,13 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
         parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
-    if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle work with an image policy.");
+    // A replacement preview reads approved sheets while its unclaimed image
+    // failure remains blocked. This exception never permits assembly writes.
+    const failedImage = verificationOnly && run.status === "blocked" && run.safeFailure === "definite_failure" && !run.activeOperationId
+      ? await database.collections.experiment_operations.findOne({ runId: run._id, role: "image", state: "failed",
+        reservationCount: 0, remoteStatus: "failed", imageReplacement: { $exists: false } }, options) : null;
+    const unclaimedImage = failedImage && isUnclaimedImageFailure(failedImage);
+    if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || (!recoveredApproval && !recoveredPagination && !recoveredImage && !unclaimedImage && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) invalid("Sheet assembly requires idle work with an image policy.");
     const draft = metadata ? metadata.versions.find((item) => item._id === value.draftSheetVersionId) : await database.collections.artifact_versions.findOne({ _id: value.draftSheetVersionId }, options);
     if (!draft || draft.createdBy !== "agent") invalid("Retained specialist sheet draft was not found.");
     const artifact = metadata ? metadata.artifacts.find((item) => item._id === draft.artifactId) : await database.collections.artifacts.findOne({ _id: draft.artifactId }, options);
