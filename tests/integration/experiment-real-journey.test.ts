@@ -34,6 +34,7 @@ import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { OperationBudgetExpired } from "@/lib/operations/budget";
 import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
+import { withOperationBudget } from "@/lib/operations/budget";
 
 const databases: Database[] = [], roots: string[] = [];
 afterEach(async () => {
@@ -438,6 +439,21 @@ describe("Real shared journey with fake providers and durable originals", () => 
       const reportPreview = await recovery.preview(reportTarget);
       await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: true } });
       expect(await recovery.verifyUnapplied(reportTarget, reportPreview.previewDigest)).toMatchObject({ outcome: "unapplied" });
+      const shortCheckpoint = vi.fn();
+      await expect(withOperationBudget(Date.now() + 65_000,
+        () => recovery.apply(reportTarget, reportPreview.previewDigest, shortCheckpoint)))
+        .rejects.toThrow("insufficient_completion_budget");
+      expect(shortCheckpoint).not.toHaveBeenCalled();
+      expect((await env.repository.getOperation(report._id))!.resultFinalizationClaim).toBeNull();
+      await expect(recovery.apply(reportTarget, reportPreview.previewDigest, async () => {
+        await env.database.collections.experiment_operations.updateOne({ _id: report._id },
+          { $set: { "m4Observation.costEvidence.estimatedUsd": 123.456 } });
+      })).rejects.toThrow("state_changed");
+      const rejectedDrift = (await env.repository.getOperation(report._id))!;
+      expect(rejectedDrift.resultFinalizationClaim).toBeNull();
+      expect(rejectedDrift.resultJson).toBeNull();
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id },
+        { $set: { m4Observation: report.m4Observation } });
       const beforeStarts = vi.mocked(env.runtime.start).mock.calls.length;
       let reportSnapshot;
       await recovery.apply(reportTarget, reportPreview.previewDigest, async saved => { reportSnapshot = saved.snapshot; });

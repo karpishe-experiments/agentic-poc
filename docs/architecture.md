@@ -798,6 +798,14 @@ estimates without changing historical M4 wire hashes. Verification preserves
 other operations, approved replacement liabilities, creative records and counters.
 Repeated completion verification reads current reference and final bytes again;
 the existing private checkpoint resolves interrupted acknowledgements.
+Report apply returns `report_saved_verification_pending` after the normal save
+and a durable `verification_pending` checkpoint. The host's existing separate
+`verify-completed` phase must pass before completion or a deployment handoff.
+Prior checkpoints remain verification-only; they never trigger another apply.
+Apply reuses its stable preview within the same closed-admission invocation,
+rechecks ownership and admission, and requires time for the unchanged 60-second
+finalization lease plus cleanup before starting the write. Historical recovery
+phases keep their existing checkpoint and verification behavior.
 
 The same protected entrypoint supports one exact retained Real tester report
 that failed at the dev6 parameter guard before client construction. Its reviewed

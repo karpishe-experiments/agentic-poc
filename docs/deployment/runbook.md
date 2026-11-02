@@ -35,6 +35,13 @@ acknowledgement from the private checkpoint. Deploy the same reviewed candidate
 source before reopening admission and using normal Resume for remaining reports.
 The installed dispatcher must accept the bounded `result_transaction` diagnostic
 phase before this candidate is used; do not bypass response validation.
+The report apply receipt is `report_saved_verification_pending`; it is not a
+completed recovery. Full verification runs in the existing separate host phases
+before and after prior-service restart. Only their success permits the handoff.
+A failed save with a started checkpoint must remain verification-only on reentry.
+The exact abort flow can restore the prior app with admission closed only after
+the pinned old candidate proves its original business snapshot unchanged. Keep
+that evidence and use a new reviewed candidate/request for a corrected apply.
 
 The replacement candidate adds `image-replacement-parking` through the same
 `candidate-reconcile` preview/apply flow. Supply the exact run, image operation
