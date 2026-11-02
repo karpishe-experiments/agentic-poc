@@ -1,14 +1,25 @@
-import type { ClientSession } from "mongodb";
+import type { ClientSession, Filter } from "mongodb";
 import type { Database } from "@/db/client";
 import { countVerificationQuery } from "@/lib/experiment-runner/diagnostics";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import type { ExperimentRunDocument } from "@/db/documents";
+import type { ExperimentOperationDocument, ExperimentRunDocument } from "@/db/documents";
 import { hasExperimentImagePolicy } from "@/db/experiment-m4-state";
 
 // Read-only evidence eligibility, never image admission or materialization.
 // Balanced retains its own operation identities while its image policy is synthetic.
 export function isBalancedImageVerificationRun(run: ExperimentRunDocument): boolean {
   return ["queued", "running", "paused", "completed"].includes(run.status) && hasExperimentImagePolicy(run);
+}
+
+// These source-read exceptions need existence only. Keep each caller's exact
+// predicate and cache only inside its transaction attempt, including misses.
+export async function verificationOperationExists(database: Database, session: ClientSession,
+  filter: Filter<ExperimentOperationDocument>, attempt?: VerificationAttempt): Promise<boolean> {
+  const read = async () => {
+    countVerificationQuery();
+    return !!await database.collections.experiment_operations.findOne(filter, { session, projection: { _id: 1 } });
+  };
+  return attempt ? attempt.metadata(`operation-exists:${JSON.stringify(filter)}`, read) : read();
 }
 
 // Read-only transport of evidence, not a validity flag. Consumers must still

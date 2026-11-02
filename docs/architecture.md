@@ -816,6 +816,12 @@ rechecks ownership and admission, and requires time for the unchanged 60-second
 finalization lease plus cleanup before starting the write. Historical recovery
 phases keep their existing checkpoint and verification behavior.
 
+Style, sheet and final-page source verification project only operation identity
+for boolean recovery-eligibility probes. The exact predicates remain separate;
+one verification attempt reuses each result and stops probing alternatives after
+a match. A new transaction attempt reads again. This cache grants no assembly,
+approval or provider-dispatch authority and does not replace original-byte checks.
+
 The same protected entrypoint supports one exact retained Real tester report
 that failed at the dev6 parameter guard before client construction. Its reviewed
 attestation pins the original run, immutable publication, failed node, disabled
