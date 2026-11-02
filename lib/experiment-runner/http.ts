@@ -38,6 +38,7 @@ import { runAccounting } from "@/lib/experiment-runner/run-accounting";
 import { externalError, redactExternalError } from "@/lib/experiment-runner/external-errors";
 import { createImageReplacementService } from "@/db/experiment-image-replacement";
 import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
+import { RECONCILIATION_REQUEST_MS } from "@/lib/operations/reconciliation-limits";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -403,7 +404,7 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
       ]);
       return data({ ...view, recovery: operationRecoveryOutcome({ run: savedRun, operation: savedOperation,
         completionRecoveries: state.config.m4?.state === "granted" ? state.config.m4.authority?.grant.completionRecoveries : undefined }) });
-    }); },
+    }, RECONCILIATION_REQUEST_MS); },
     imageFixture(request: Request) { return run(async () => {
       const denied = toolAuth(request, config()); if (denied) return denied;
       const input = imageQuery(request);

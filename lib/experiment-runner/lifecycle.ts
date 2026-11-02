@@ -7,6 +7,7 @@ import type { BookletBinding } from "@/lib/experiment-runner/config";
 import type { RuntimeResult, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { operationSignal, remainingOperationMs, withOperationBudget } from "@/lib/operations/budget";
 import { cancelOwnedControllers } from "@/lib/operations/controllers";
+import { RECONCILIATION_WORK_MS, RECONCILIATION_REQUEST_MS } from "@/lib/operations/reconciliation-limits";
 
 /** All callers inspect through the normal output verifier before considering stop. */
 export function createOperationCoordinator(deps: {
@@ -52,7 +53,7 @@ export function createOperationCoordinator(deps: {
   }
   async function inspectWork(input: Inspection) {
     // Recovery gets a bounded observation window, not a renewed execution lease.
-    return withOperationBudget(now() + 20_000, async () => {
+    return withOperationBudget(now() + RECONCILIATION_WORK_MS, async () => {
       let run = await runs.findOne({ _id: input.runId });
       let operation = await operations.findOne({ _id: input.operationId, runId: input.runId });
       if (!run || !operation) throw new ExperimentRepositoryError("not_found", "Operation was not found.");
@@ -124,7 +125,7 @@ export function createOperationCoordinator(deps: {
     }, { now });
   }
   async function inspect(input: Inspection) {
-    return withOperationBudget(now() + 30_000, async () => {
+    return withOperationBudget(now() + RECONCILIATION_REQUEST_MS, async () => {
       try { return await inspectWork(input); }
       catch (error) {
         if (!input.stop || error instanceof ExperimentRepositoryError) throw error;
