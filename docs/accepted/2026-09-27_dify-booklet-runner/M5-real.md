@@ -184,19 +184,30 @@ journey verifies recovery after a report-save failure, repeated verification and
 normal completion of both reports without another provider request for the
 retained tester.
 
-Protected preview `41452848864` passed for revision1626. Apply `41453474651`
-verified backup `staging-recovery-issue65-m5-settled-report-20261102`, but its
-150-second command window expired during normal report completion. Inspection
-`41456391380` confirmed no saved tester result, materialization or remaining
-claim, with admission closed and quiet. Exact abort `41456989160` then proved
-the original business snapshot unchanged and restored the prior app closed.
-The original checkpoint and backup remain retained. This is not M5 completion.
-
 The correction removes duplicate apply snapshots/readbacks and separates its
 durable `report_saved_verification_pending` receipt from the host's existing full
 verification phases. It reserves time for the unchanged finalization lease and
 cleanup before a write. An existing checkpoint remains verification-only. The
-correction requires new review and delivery; no additional image is authorized.
+protected phase-two apply `41489333871` still failed: the normal report transaction
+reached its60-second database timeout with19805ms left in the outer command
+window. Inspection `41492426892` found no saved report, materialization or claim.
+Exact abort `41493174826` stopped with `state_changed`; restoration is not proved
+and admission remains closed. The checkpoint and verified backup
+`staging-recovery-issue65-m5-report-phase2-20261102` remain retained.
+This is not M5 completion. Do not replay apply or bypass the snapshot check.
+
+The next correction projects and reuses repeated boolean recovery-eligibility
+reads within one transaction attempt, retaining the exact source predicates and
+all original-byte checks. Live performance remains unproved. Failure diagnostics
+are stored outside the failed transaction and can change its full-row snapshot;
+their effect on this abort must be proved without deleting or ignoring them.
+No additional image is authorized.
+
+The diagnostic abort candidate reconstructs only appended save diagnostics in
+memory and requires the complete original preview digest. Its host helper is
+pinned separately from the interrupted recovery candidate and must have identical
+schema fingerprints. Until this proof and normal prior-app readiness pass live,
+restoration remains unproved. No report or accounting write is part of this path.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error

@@ -42,6 +42,15 @@ checkpoint explicit, use the existing full verification phases, and reserve the
 normal claim window before writing. An unapplied abort must prove the original
 snapshot unchanged; absent results and owners alone do not prove rollback.
 
+The next live attempt retained outer command time but reached the normal
+60-second transaction limit. Increasing only the outer window cannot resolve
+that boundary. Source readers repeatedly fetched the same full tester document
+for boolean eligibility checks. Project identity and reuse exact predicates only
+within one transaction attempt. Keep the lease and original-byte checks.
+Also account for failure diagnostics written outside the failed transaction:
+they change full-row hashes even when report writes roll back. An abort must
+prove the difference; it must not ignore or delete diagnostic evidence.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the

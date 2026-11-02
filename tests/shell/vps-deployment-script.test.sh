@@ -21,6 +21,16 @@ if (ORIGINAL_REQUEST_ID="$REQUEST_ID"; validate_arguments) >/dev/null 2>&1; then
 (ABORT_RECOVERY=true; validate_arguments)
 if (INSPECTION_ONLY=true; validate_arguments) >/dev/null 2>&1; then exit 1; fi
 RELEASE_EXPIRED_CLAIM=false
+(
+  ORIGINAL_REQUEST_ID='' ABORT_RECOVERY=true
+  ABORT_PROOF_IMAGE=ghcr.io/example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  ABORT_PROOF_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  validate_arguments
+  if (ABORT_RECOVERY=false; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+  if (APPLY=false; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+  if (ABORT_PROOF_COMMIT=''; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+  if (ORIGINAL_REQUEST_ID=parent; validate_arguments) >/dev/null 2>&1; then exit 1; fi
+)
 ORIGINAL_REQUEST_ID=old-prebackup-deploy
 validate_arguments
 if (ORIGINAL_REQUEST_ID="$REQUEST_ID"; validate_arguments) >/dev/null 2>&1; then exit 1; fi
