@@ -16,6 +16,7 @@ import { ImageReplacementReview } from "./image-replacement-review";
 import type { ContextDiagnostics } from "@/lib/experiment-runner/context-diagnostics";
 import { failureReasonLabels, type FailureDiagnostics } from "@/lib/contracts/experiment-failure";
 import type { ImageCapacity } from "@/lib/experiment-runner/image-capacity";
+import { RECONCILIATION_CLIENT_MS } from "@/lib/operations/reconciliation-limits";
 
 const personas = [
   { id: "playful_kid", label: "Playful kid" },
@@ -209,7 +210,7 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
     setBusy(true); setActionError(null);
     try {
       await read<Run>(await fetch(`/api/experiments/booklet-runs/${run.runId}/${action}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(35_000),
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(RECONCILIATION_CLIENT_MS),
         body: JSON.stringify({ expectedRevision: run.revision, ...(preparation ? { preparationId: operationId } : { operationId }) }),
       }));
       await refresh();

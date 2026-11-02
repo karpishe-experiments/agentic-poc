@@ -837,7 +837,7 @@ recovery_normalize_response() {
         (["event","timestamp","runId","phase","elapsedMs","outcome","budgetAtStartMs","remainingBudgetMs","queryCount","storageCallCount","transactionAttempts"]-keys|length)==0 and
         .runId==$run and ((has("operationId")|not) or .operationId==$operation) and .outcome=="succeeded" and
         (.timestamp|type=="string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")) and
-        (.phase|IN("accounting_campaign_read","accounting_campaign_operations_read","accounting_failed_proofs_read","accounting_failure_sources_read","accounting_run_operations_read","accounting_operation_validation","generation_accounting","evaluation_operations_read","source_verification")) and
+        (.phase|IN("accounting_campaign_read","accounting_campaign_operations_read","accounting_failed_proofs_read","accounting_failure_sources_read","accounting_run_operations_read","accounting_operation_validation","generation_accounting","evaluation_operations_read","source_verification","result_transaction")) and
         (.elapsedMs|count) and (.budgetAtStartMs|duration) and (.remainingBudgetMs|duration) and
         (.queryCount|count) and (.storageCallCount|count) and (.transactionAttempts|count) and
         ((has("readRows")|not) or (.readRows|count)) and ((has("readJsonBytes")|not) or (.readJsonBytes|duration))

@@ -14,11 +14,13 @@ charge but is not a prerequisite for this approved replacement.
 
 ## Reusable approvals and diagnostics implementation checkpoint — 2026-11-01
 
-The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`, with eight saved
-images and one missing final page. Its initial allowance was USD5. The
-retained estimate is USD0.561311 settled plus USD4.438689 reserved; reserved
-liability is not a verified invoice charge. The accepted allowance amendment and
-replacement result are recorded below.
+The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`. The approved
+replacement saved its missing final page; tester materialization and judge
+completion remain blocked. Its initial allowance was USD5 and its accepted
+total is USD10. The earlier image liability remains reserved and is not a
+verified invoice charge. The retained tester cost snapshot estimates USD5.092238
+of total exposure, including reserved liability. Final accounting and all nine
+current image-byte checks remain acceptance requirements.
 
 The implementation extends the current allowance ledger for proactive and
 repeated finite increases on all eligible Balanced/Real runs. Active work reaches
@@ -131,7 +133,56 @@ assembly writes and dispatch eligibility remain unchanged. All eight affected
 Real journeys, 21 focused unit tests, typecheck and focused lint pass. Two
 independent code reviews are clean. All ten sheet assembly tests also pass after
 replacing a stale message assertion with its rejection code.
-This correction is not yet deployed.
+Source PR #331 merged as `465cae769ece404aacae5900089b250a668c2b6c`;
+staging PR #332 merged as `dff8763aef7c1810894e4dc8954834eb02ca8f95`.
+Both CI runs passed. Deployment `41424853241` again outlived its client observer;
+exact host status `41435123989` proves request `41424853241-1` completed and
+archived without replay, using image
+`sha256:9200509c4baec5e7e1444509a0b073ef4a87a445ce48fbc04db2636a800c2621`
+and backup `staging-20261102T100217Z-37031f4e52352531`.
+Independent Check `41435224938` passed. The refreshed live preview succeeds for
+failed operation `e7aec432-0077-4351-80fa-eee1d12e3137`, at run revision1605
+and campaign revision105. It confirms an unclaimed failure with zero liability,
+the unchanged USD10 allowance, USD0.561311 estimated settled and USD4.438689
+reserved. The user explicitly approved one new linked page-3 image attempt and
+normal verification/tester/judge completion within that existing total. Limits
+remain 120 text / 12 images / 300 steps, revisions1/1 and no-progress3, with
+zero automatic retries or successors. The original unknown hold remains.
+Computer Use could not verify Chrome's URL and stopped before submission;
+the operator received normal-UI steps. The operator then supplied accepted receipt
+`52b9d8bc-398e-4c83-95e9-84e411087e6a`, creating linked operation
+`9563e2e5-1401-4962-b563-39e05e86c1d0`. Image workflow
+`1fa085ff-278d-4a80-9855-7c36300efb8a` succeeded in77.184059 seconds.
+Diagnostics `41436568227` confirms saved result and materialization, with
+43 text / 10 image calls and53 steps. Tester operation
+`c9d68073-2377-48d0-8a49-9666d039d303` then received a successful Dify result
+from workflow `a3664e77-2fa8-4f76-81b5-e735a98fb5b9` in34.126266 seconds.
+Its retained wrapper and creative report pass their schemas; its request digest
+and four-image manifest match the authorized carrier. These checks do not prove
+settlement or materialization. Protected diagnostics `41438098694` still shows
+revision1626, `unknown_outcome`, and that active tester, with44 text / 10 image
+calls and54 steps. Reconcile this existing result; do not repeat the provider
+request. Judge completion and final accounting remain unproven.
+
+The retained app logs identify the report blocker: the first result transaction
+started with2091ms remaining and expired before saving. Its cleanup completed and
+readback reported an uncommitted transaction. Subsequent inspection attempts
+repeatedly exhausted the short observation window during database readback.
+The saved text observation has no provider-evidence issue and includes its settled
+cost snapshot. The local correction gives existing-work reconciliation120 seconds,
+with aligned130-second API and135-second browser bounds. It preserves provider
+deadlines, finalization leases, reservations and the no-replay contract. This
+correction is not yet evidence of live completion.
+
+The protected candidate path also supports completing this retained settled
+report through the normal repository transaction. Its scoped snapshot includes
+decimal cost estimates, current creative records and approved image-replacement
+proofs. It requires fresh original-execution readback, a stable revision, closed
+quiet admission and absent save owners. It preserves the provider deadline,
+counters and old image hold and leaves the run paused. The local replacement
+journey verifies recovery after a report-save failure, repeated verification and
+normal completion of both reports without another provider request for the
+retained tester. This path still requires review and live delivery.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error

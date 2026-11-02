@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -32,6 +32,8 @@ import { experimentReportSchema } from "@/lib/contracts/experiment-reports";
 import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/transport";
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
+import { OperationBudgetExpired } from "@/lib/operations/budget";
+import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
 
 const databases: Database[] = [], roots: string[] = [];
 afterEach(async () => {
@@ -84,6 +86,19 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   let imageFailureNeedsReferences = false;
   let rejectImageAuthorization = false;
   let reportStatus = "completed";
+  let reportSaveFailure = false;
+  const operationCollection = database.collections.experiment_operations;
+  const originalUpdate = operationCollection.findOneAndUpdate.bind(operationCollection);
+  vi.spyOn(operationCollection, "findOneAndUpdate").mockImplementation(async (...args) => {
+    if (reportSaveFailure && !Array.isArray(args[1]) && args[1].$set?.resultFinalizationClaim) {
+      const operation = await operationCollection.findOne(args[0]);
+      if (operation?.role === "tester" && operation.realReportPreparation) {
+        reportSaveFailure = false;
+        throw new OperationBudgetExpired();
+      }
+    }
+    return originalUpdate(...args);
+  });
   let imageFailureTask: "J13" | null = null;
   const uploads = new Map<string, Uint8Array>();
   const uploadReference = vi.fn(async (_binding: BookletRunnerConfig["bindings"][number], _runId: string, bytes: Uint8Array) => {
@@ -245,8 +260,11 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
     replacementService: () => createImageReplacementService({ database, config, store, runtime, now }),
     rejectNextImageAuthorization: () => { rejectImageAuthorization = true; },
     parkingService: () => createImageReplacementParkingRecovery({ database, config, store, runtime, now }),
+    reportRecovery: () => createSettledReportRecovery({ database, config, store, runtime, now }),
+    failNextReportSave: () => { reportSaveFailure = true; },
     cycle: () => createExperimentDispatcher({ database, config, runtime, store: () => store, mutate: async fn => fn(), now }).cycle(),
     expireOperation: () => { clock += 300_001; vi.spyOn(Date, "now").mockImplementation(now); },
+    elapseObservation: (milliseconds: number) => { clock += milliseconds; },
     unknownReportOutcome: () => { reportStatus = "unknown"; },
     inspect: (operationId: string) => createExperimentDispatcher({ database, config, runtime, store: () => store,
       mutate: async fn => fn(), now }).inspect({ runId, operationId }),
@@ -266,6 +284,55 @@ async function advance(env: Awaited<ReturnType<typeof setup>>, step: number) {
 }
 
 describe("Real shared journey with fake providers and durable originals", () => {
+  it("materializes a settled Real tester after slow inspection without renewing or replaying its request", async () => {
+    const env = await setup("playful_kid", "execution_v2");
+    const collection = env.database.collections.experiment_operations;
+    env.failNextReportSave();
+    for (let step = 0; step < 180; step++) {
+      await env.advance();
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+    }
+    const blocked = (await env.repository.getRun(env.runId))!;
+    expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
+    const report = (await env.repository.getOperation(blocked.activeOperationId!))!;
+    expect(report).toMatchObject({ role: "tester", state: "unknown", resultJson: null,
+      m4Observation: { issue: null, remoteStatus: "succeeded" } });
+    const starts = vi.mocked(env.runtime.start).mock.calls.length;
+    env.expireOperation();
+    const find = collection.findOne.bind(collection);
+    let delayedReads = 0;
+    const slowReads = vi.spyOn(collection, "findOne").mockImplementation(async (...args) => {
+      const result = await find(...args);
+      if (args[0]?._id === report._id && delayedReads < 3) {
+        delayedReads++;
+        // Each read fits its own bound; cumulative database work exceeds the
+        // former observation window without enlarging the 10-second Dify GET.
+        env.elapseObservation(15_000);
+      }
+      return result;
+    });
+    const recovered = await env.inspect(report._id);
+    slowReads.mockRestore();
+    expect(delayedReads).toBe(3);
+    expect(recovered).toMatchObject({ state: "succeeded", workflowRunId: report.workflowRunId,
+      deadlineAtMs: report.deadlineAtMs, reservationCount: 1, m4Reservation: report.m4Reservation });
+    expect(recovered.materializationJson).not.toBeNull();
+    expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(starts);
+    const paused = (await env.repository.getRun(env.runId))!;
+    expect(paused).toMatchObject({ status: "paused", activeOperationId: null, counters: blocked.counters });
+    await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: Date.now() });
+    for (let step = 0; step < 180; step++) {
+      if ((await env.repository.getRun(env.runId))!.status === "completed") break;
+      await advance(env, step);
+    }
+    const complete = (await env.repository.getRun(env.runId))!;
+    expect(complete.status).toBe("completed");
+    const operations = await env.repository.listOperations(env.runId);
+    expect(operations.filter(item => item.realReportPreparation).map(item => [item.role, item.state]))
+      .toEqual([["tester", "succeeded"], ["judge", "succeeded"]]);
+    expect(await env.database.collections.assets.countDocuments({ bookletId: complete.bookletId })).toBe(9);
+    await withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, complete));
+  }, 180_000);
   it.each([false, true])("replaces one explicitly approved unknown image and completes Kid (authorization failure=%s)", async authorizationFailure => {
     const env = await setup("playful_kid", "execution_v2");
     env.failNextImage("unknown_outcome", "J13", true);
@@ -350,10 +417,49 @@ describe("Real shared journey with fake providers and durable originals", () => 
       expect(await env.replacementService().approve(nextInput)).toMatchObject({ reused: true });
       finalReplacementId = nextReceipt.replacementOperationId;
     }
+    if (authorizationFailure) env.failNextReportSave();
+    let reportRecovered = false;
     for (let step = 0; step < 180; step++) {
       if ((await env.repository.getRun(env.runId))!.status === "completed") break;
-      await advance(env, step);
+      if (!authorizationFailure || reportRecovered) { await advance(env, step); continue; }
+      await env.advance();
+      const current = (await env.repository.getRun(env.runId))!;
+      if (current.status !== "blocked") continue;
+      const report = (await env.repository.getOperation(current.activeOperationId!))!;
+      expect(report).toMatchObject({ role: "tester", state: "unknown", m4Observation: { issue: null } });
+      env.expireOperation();
+      const recovery = env.reportRecovery();
+      const reportTarget = { runId: env.runId, operationId: report._id, expectedRevision: current.revision };
+      await expect(recovery.preview({ ...reportTarget, expectedRevision: current.revision + 1 })).rejects.toThrow("revision_changed");
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id },
+        { $set: { resultFinalizationClaim: { id: randomUUID(), expiresAtMs: Date.now() + 60_000 } } });
+      await expect(recovery.preview(reportTarget)).rejects.toThrow("settled_report_ineligible");
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $set: { resultFinalizationClaim: null } });
+      const reportPreview = await recovery.preview(reportTarget);
+      await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: true } });
+      expect(await recovery.verifyUnapplied(reportTarget, reportPreview.previewDigest)).toMatchObject({ outcome: "unapplied" });
+      const beforeStarts = vi.mocked(env.runtime.start).mock.calls.length;
+      let reportSnapshot;
+      await recovery.apply(reportTarget, reportPreview.previewDigest, async saved => { reportSnapshot = saved.snapshot; });
+      expect(await recovery.verifyCompleted(reportTarget, reportSnapshot!)).toMatchObject({ outcome: "report_completed", providerPosts: 0 });
+      const originalEntry = [...env.originals.entries()][0];
+      const originalAsset = (await env.database.collections.assets.findOne({ _id: originalEntry[0] }))!;
+      const originalPath = path.join(env.root, originalAsset.uri);
+      await writeFile(originalPath, new Uint8Array([1, 2, 3]));
+      await expect(recovery.verifyCompleted(reportTarget, reportSnapshot!)).rejects.toThrow();
+      await writeFile(originalPath, originalEntry[1]);
+      expect(await recovery.verifyCompleted(reportTarget, reportSnapshot!)).toMatchObject({ outcome: "report_completed" });
+      expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(beforeStarts);
+      expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+      expect(await env.repository.getOperation(report._id)).toMatchObject({ state: "succeeded", deadlineAtMs: report.deadlineAtMs,
+        workflowRunId: report.workflowRunId, m4Reservation: report.m4Reservation });
+      const paused = (await env.repository.getRun(env.runId))!;
+      expect(paused).toMatchObject({ status: "paused", counters: current.counters });
+      await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: false } });
+      await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: Date.now() });
+      reportRecovered = true;
     }
+    expect(reportRecovered).toBe(authorizationFailure);
     const complete = (await env.repository.getRun(env.runId))!;
     expect(complete.status).toBe("completed");
     expect(complete.imageReplacementApprovals).toHaveLength(authorizationFailure ? 2 : 1);
