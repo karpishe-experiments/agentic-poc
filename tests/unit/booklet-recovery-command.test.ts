@@ -47,6 +47,7 @@ vi.mock("@/lib/operations/execution-text-recovery", () => ({
 }));
 vi.mock("@/lib/operations/settled-report-recovery", () => ({
   createSettledReportRecovery: vi.fn(() => ({ preview: mocks.preview, apply: mocks.apply,
+    deferCompletedVerification: true,
     verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
     previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim })),
 }));
@@ -105,6 +106,32 @@ beforeEach(() => {
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  it("checkpoints a saved report as verification pending and verifies it in the separate host phase", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    argumentsFor("apply"); await import("@/scripts/booklet-recovery");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).not.toHaveBeenCalled();
+    const path = "/recovery/application-recovery.json";
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("verification_pending");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toMatchObject({
+      outcome: "report_saved_verification_pending", providerPosts: 0 });
+    mocks.verify.mockRejectedValueOnce(new Error("image bytes changed"));
+    argumentsFor("verify-completed"); vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(process.exitCode).toBe(1);
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("verification_pending");
+    expect(mocks.apply).toHaveBeenCalledOnce();
+    process.exitCode = 0; vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(process.exitCode).toBe(0);
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("completed");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledTimes(2);
+  });
+  it("verifies a lost report apply receipt without repeating materialization", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    argumentsFor("apply"); await import("@/scripts/booklet-recovery");
+    vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledOnce();
+    expect(JSON.parse(mocks.files.get("/recovery/application-recovery.json")!).phase).toBe("completed");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toMatchObject({ repeated: true });
+  });
   it("routes a successful retained Real report through protected completion", async () => {
     mocks.execution = true; mocks.settledReport = true;
     argumentsFor("preview");

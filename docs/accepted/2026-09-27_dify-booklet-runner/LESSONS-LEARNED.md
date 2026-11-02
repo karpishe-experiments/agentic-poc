@@ -35,6 +35,13 @@ journey regression verifies a failed save, slow observation, no additional
 provider start, and completion through both reports. Promotion candidate:
 **Documentation** for asynchronous completion and recovery boundaries.
 
+The protected recovery also exhausted its maintenance window after duplicate
+preflight reads consumed109 seconds. Its apply command repeated full verification
+that the host already performs in separate phases. Keep a saved-but-unverified
+checkpoint explicit, use the existing full verification phases, and reserve the
+normal claim window before writing. An unapplied abort must prove the original
+snapshot unchanged; absent results and owners alone do not prove rollback.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the
