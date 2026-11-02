@@ -16,6 +16,10 @@ published workflow. A terminal workflow with zero authorization reservations
 also needs an explicit approval and accounting path before a new attempt; an
 unknown charged attempt must retain its hold. The focused persistence journey
 verifies both attempts, nine image objects and both reports without record repair.
+Use a story-page target with approved sheet references for this journey. A cover
+has no sheet references and therefore missed a second blocked-state check in
+sheet verification. The referenced-page regression reproduced the live error;
+review page, style and sheet readers together when continuation states change.
 Promotion candidate: **Documentation** for integration-test boundaries and
 operation-specific execution configuration.
 
