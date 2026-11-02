@@ -16,23 +16,30 @@ import { realExecutionPolicyFromM4TechnicalProfile, type ExecutionAllowance } fr
 import { configurationSnapshot, selectBinding, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { diagnosticExecutionAmendment, operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 import { createWorkflowRuntime, type WorkflowRuntime } from "@/lib/experiment-runner/transport";
+import { isUnclaimedImageFailure } from "@/lib/experiment-runner/image-pre-provider-failure";
 
 function conflict(message: string): never { throw new ExperimentRepositoryError("conflict", message); }
 const hash = (value: unknown) => m4Hash(m4CanonicalJson(value));
 export function imageReplacementEvidence(run: ExperimentRunDocument, op: ExperimentOperationDocument) {
   return hash({ runId: run._id, profile: run.execution, configurationHash: run.configurationHash,
-    operationId: op._id, workflowRunId: op.workflowRunId, verifiedWorkflowId: op.verifiedWorkflowId,
+    operationId: op._id, workflowRunId: op.workflowRunId,
+    verifiedWorkflowId: isUnclaimedImageFailure(op) ? null : op.verifiedWorkflowId,
     deadlineAtMs: op.deadlineAtMs, inputFingerprint: op.inputFingerprint,
     imageRequestJson: op.imageRequestJson, sources: op.dependencyVersionIds,
-    preparation: op.realImagePreparation, observation: op.realImageObservation, reservation: op.realImageReservation });
+    preparation: op.realImagePreparation,
+    observation: isUnclaimedImageFailure(op) ? null : op.realImageObservation,
+    reservation: isUnclaimedImageFailure(op) ? null : op.realImageReservation,
+    ...(isUnclaimedImageFailure(op) ? { unclaimedFailure: { state: op.state, remoteStatus: op.remoteStatus,
+      dispatchStartedAtMs: op.dispatchStartedAtMs, executionAmendmentId: op.executionAmendmentId ?? null } } : {}) });
 }
 
 export async function hasApprovedImageReplacement(database: Database, session: ClientSession,
   run: ExperimentRunDocument, op: ExperimentOperationDocument) {
   const approval = op.imageReplacement && run.imageReplacementApprovals?.find(a => a.approvalId === op.imageReplacement!.approvalId);
   if (!approval || approval.operationId !== op._id || approval.replacementOperationId !== op.imageReplacement?.replacementOperationId ||
+      !op.deadlineAtMs || op.deadlineAtMs >= approval.approvedAtMs ||
       approval.evidenceDigest !== imageReplacementEvidence(run, op) || approval.evidenceDigest !== op.imageReplacement.evidenceDigest ||
-      op.state !== "unknown" || op.role !== "image" || op.remoteStatus !== "failed" && op.remoteStatus !== "stopped" ||
+      !(op.state === "unknown" || isUnclaimedImageFailure(op)) || op.role !== "image" || op.remoteStatus !== "failed" && op.remoteStatus !== "stopped" ||
       op.authorizationClaim || op.resultFinalizationClaim || op.imageCompletionClaim || op.resultJson || op.materializationJson) return false;
   const next = await database.collections.experiment_operations.findOne({ _id: approval.replacementOperationId, runId: run._id }, { session });
   return !!next && next.replacesImageOperationId === op._id && next.subjectKind === op.subjectKind && next.subjectId === op.subjectId &&
@@ -53,17 +60,22 @@ export function createImageReplacementService(deps: { database: Database; config
   async function state(session: ClientSession, runId: string, operationId: string) {
     const run = await db.collections.experiment_runs.findOne({ _id: runId }, { session });
     const op = await db.collections.experiment_operations.findOne({ _id: operationId, runId }, { session });
-    if (!run?.execution || run.mode !== "real" || run.status !== "blocked" || run.safeFailure !== "unknown_outcome" ||
-        !(run.activeOperationId === operationId || run.activeOperationId === null && run.imageReplacementParking?.operationId === operationId) ||
+    const unclaimed = !!op && isUnclaimedImageFailure(op);
+    if (!run?.execution || run.mode !== "real" || run.status !== "blocked" ||
+        run.safeFailure !== (unclaimed ? "definite_failure" : "unknown_outcome") ||
+        !(run.activeOperationId === operationId || run.activeOperationId === null &&
+          (unclaimed || run.imageReplacementParking?.operationId === operationId)) ||
         run.preparation || run.pendingApproval || run.allowanceAdjustment || !op ||
-        op.role !== "image" || op.providerKind !== "image" || op.state !== "unknown" || !op.workflowRunId ||
-        !op.verifiedWorkflowId || !op.deadlineAtMs || op.deadlineAtMs >= now() || op.reservationCount !== 1 ||
-        !op.realImagePreparation || !op.realImageObservation || !op.realImageReservation ||
+        op.role !== "image" || op.providerKind !== "image" || !unclaimed && op.state !== "unknown" || !op.workflowRunId ||
+        !unclaimed && !op.verifiedWorkflowId || !op.deadlineAtMs || op.deadlineAtMs >= now() || !unclaimed && op.reservationCount !== 1 ||
+        !op.realImagePreparation || !unclaimed && (!op.realImageObservation || !op.realImageReservation) ||
         op.imageReplacement || op.resultJson || op.materializationJson ||
         op.authorizationClaim || op.resultFinalizationClaim || op.imageCompletionClaim) conflict("Image replacement requires a terminal unknown attempt with no active owner or saved image.");
-    const observation = realImageResultSchema.parse(JSON.parse(op.realImageObservation.resultJson));
+    if (!unclaimed) {
+    const observation = realImageResultSchema.parse(JSON.parse(op.realImageObservation!.resultJson));
     if (observation.status !== "unknown_outcome" || !observation.dispatchStarted || observation.output || observation.usage ||
-        op.realImageReservation.settledMicrodollars !== null || op.realImageReservation.unsettledMicrodollars !== op.realImageReservation.planningHoldMicrodollars) conflict("Original image liability is not intact.");
+        op.realImageReservation!.settledMicrodollars !== null || op.realImageReservation!.unsettledMicrodollars !== op.realImageReservation!.planningHoldMicrodollars) conflict("Original image liability is not intact.");
+    }
     const controls = await db.collections.deployment_control.find({ "mutationOwners.runId": runId }, { session }).toArray();
     if (controls.some(c => c.mutationOwners?.some(o => o.runId === runId && o.id !== currentMutationOwnerId()))) conflict("Another mutation owns the run.");
     const others = await db.collections.experiment_operations.find({ runId, _id: { $ne: operationId }, $or: [
@@ -99,10 +111,12 @@ export function createImageReplacementService(deps: { database: Database; config
   async function observe(run: ExperimentRunDocument, op: ExperimentOperationDocument) {
     const current = selectBinding(deps.config, "image", null, run.persona, run.mode);
     const original = operationConfiguration(run, op).find(b => b.role === "image" && b.taskId === null);
-    if (!original || original.appId !== current.appId || original.publishedWorkflowId !== op.verifiedWorkflowId) conflict("Original image publication is unavailable for inspection.");
+    const expectedWorkflowId = isUnclaimedImageFailure(op) ? original?.publishedWorkflowId : op.verifiedWorkflowId;
+    if (!original || original.appId !== current.appId || original.publishedWorkflowId !== expectedWorkflowId) conflict("Original image publication is unavailable for inspection.");
     const binding = { ...current, publishedWorkflowId: original.publishedWorkflowId };
     const result = await runtime.retrieve(binding, op.workflowRunId!, { deadlineAtMs: now() + 30_000 });
-    if (result.kind !== "execution" || result.execution.id !== op.workflowRunId || result.execution.workflow_id !== op.verifiedWorkflowId ||
+    if (result.kind !== "execution" || result.execution.id !== op.workflowRunId || result.execution.workflow_id !== expectedWorkflowId ||
+        isUnclaimedImageFailure(op) && result.execution.status !== "failed" ||
         !["failed", "stopped"].includes(result.execution.status) || Object.keys(result.execution.outputs ?? {}).length) conflict("Original execution is not proven terminal without a result.");
     return result.execution.status;
   }
@@ -116,7 +130,8 @@ export function createImageReplacementService(deps: { database: Database; config
       executionAmendment: update ? { id: update.id, baseProfileHash: update.baseProfileHash, profileHash: update.profileHash,
         publications: JSON.parse(update.configurationJson) } : null,
       expiresAtMs, terminalStatus, target: { taskId: saved.op.taskId, subjectId: saved.op.subjectId },
-      retainedLiabilityMicrodollars: saved.op.realImageReservation!.unsettledMicrodollars,
+      retainedLiabilityMicrodollars: saved.op.realImageReservation?.unsettledMicrodollars ?? 0,
+      previousAttemptKind: isUnclaimedImageFailure(saved.op) ? "unclaimed_failure" : "unknown_outcome",
       totals: saved.campaign.allowance, settledMicrodollars: saved.campaign.settledMicrodollars, reservedMicrodollars: saved.campaign.reservedMicrodollars };
   }
   async function approve(input: { runId: string; operationId: string; approvalId: string; reference: string;
@@ -170,19 +185,19 @@ export function createImageReplacementService(deps: { database: Database; config
         ...await (async () => {
           if (op.taskId !== "J13") return {};
           const jobs = (await db.collections.generation_jobs.find({ bookletId: run.bookletId, jobType: "dify_pages",
-            status: { $in: ["pending", "running", "paused", "unknown", "partial"] } }, { session }).toArray())
+            status: { $in: ["pending", "running", "paused", "unknown", "partial", ...(isUnclaimedImageFailure(op) ? ["failed"] : [])] } }, { session }).toArray())
             .filter(job => JSON.parse(job.inputJson).runId === run._id);
           if (jobs.length !== 1) conflict("Replacement requires one retained page batch.");
           const items = await db.collections.generation_items.find({ jobId: jobs[0]._id, itemKey: op.subjectId }, { session }).toArray();
-          if (items.length !== 1 || !items[0].resultJson || !["running", "unknown"].includes(items[0].status) || items[0].assetId) conflict("Page batch ownership changed.");
+          if (items.length !== 1 || !items[0].resultJson || !["running", "unknown", ...(isUnclaimedImageFailure(op) ? ["failed"] : [])].includes(items[0].status) || items[0].assetId) conflict("Page batch ownership changed.");
           const item = items[0], prior = JSON.parse(item.resultJson!);
           if (prior.operationId !== op._id || prior.assetId || prior.pageVersionId) conflict("Page batch does not own the original unknown image.");
           const bound = await db.collections.generation_items.updateOne({ _id: item._id, resultJson: item.resultJson }, { $set: {
-            status: "running", startedAtMs: now(), finishedAtMs: null,
+            status: "running", startedAtMs: now(), finishedAtMs: null, errorJson: null,
             resultJson: JSON.stringify({ ...prior, operationId: replacementOperationId,
               replacedOperationIds: [...prior.replacedOperationIds ?? [], op._id] }) }, $inc: { attemptCount: 1 } }, { session });
           if (bound.modifiedCount !== 1) conflict("Page batch changed before replacement approval.");
-          await db.collections.generation_jobs.updateOne({ _id: jobs[0]._id }, { $set: { status: "running", updatedAtMs: now() } }, { session });
+          await db.collections.generation_jobs.updateOne({ _id: jobs[0]._id }, { $set: { status: "running", finishedAtMs: null, errorJson: null, updatedAtMs: now() } }, { session });
           return { batch: { itemId: item._id, previousStatus: item.status, previousResultJson: item.resultJson! } };
         })() };
       const updated = await db.collections.experiment_runs.updateOne({ _id: run._id, revision: run.revision, activeOperationId: run.activeOperationId },

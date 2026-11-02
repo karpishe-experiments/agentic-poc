@@ -383,6 +383,10 @@ export function BookletRunner({ focusedRunId, balancedEnabled = false, realEnabl
           allowance={run.executionAllowance} onSaved={() => refresh(undefined, true)} /></details> : null}
       <details className="text-sm text-[var(--muted-ink)]"><summary className="cursor-pointer">Run identifiers</summary><div className="mt-2 space-y-1 break-all"><p>Run {run.runId}</p>{run.bookletId ? <p>Booklet {run.bookletId}</p> : null}<p>Revision {run.revision}</p></div></details>
       <ExternalErrorDetails key={run.runId} runId={run.runId} />
+      {run.status === "blocked" && run.safeFailure === "definite_failure" && run.mode === "real" && run.executionAllowance && !run.activeOperationId ?
+        run.operationHistory?.filter(op => op.role === "image" && op.state === "failed" && op.reservationCount === 0 &&
+          op.remoteStatus === "failed" && op.workflowRunId).slice(-1).map(op =>
+          <ImageReplacementReview key={op.id} runId={run.runId} operationId={op.id} onSaved={() => refresh(undefined, true)} />) : null}
       {run.status === "blocked" && run.safeFailure === "unknown_outcome" && (run.activeOperationId || run.imageReplacementParking?.operationId) &&
         run.operationHistory?.some(op => op.id === (run.activeOperationId || run.imageReplacementParking?.operationId) && op.role === "image") ?
         <ImageReplacementReview key={run.activeOperationId || run.imageReplacementParking?.operationId} runId={run.runId} operationId={(run.activeOperationId || run.imageReplacementParking?.operationId)!}

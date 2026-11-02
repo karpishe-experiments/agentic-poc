@@ -15,6 +15,7 @@ import { FilesystemAssetStore } from "@/lib/assets/filesystem-asset-store";
 import { createExperimentContextService } from "@/lib/experiment-runner/context";
 import { configurationSnapshot, type BookletRunnerConfig } from "@/lib/experiment-runner/config";
 import { createExperimentDispatcher } from "@/lib/experiment-runner/dispatch";
+import { createBookletRunnerHttp } from "@/lib/experiment-runner/http";
 import { simulateNarrativeResult } from "@/lib/experiment-runner/fixtures";
 import { simulatedExperimentReport } from "@/lib/experiment-runner/report-fixtures";
 import { createExperimentImageStorage } from "@/lib/experiment-runner/image-storage";
@@ -80,6 +81,7 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   let reviseSheet = false;
   let revisedVersionId: string | null = null;
   let imageFailure: "rejected_pre_provider" | "failed_after_provider" | "unknown_outcome" | null = null;
+  let rejectImageAuthorization = false;
   let reportStatus = "completed";
   let imageFailureTask: "J13" | null = null;
   const uploads = new Map<string, Uint8Array>();
@@ -92,7 +94,27 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
       try {
       const workflowRunId = randomUUID();
       const identity = { runId, operationId: input.operationId, workflowRunId, parentWorkflowRunId: input.parentWorkflowRunId };
-      const claim = await repository.claimOperation({ ...identity, nowMs: now() }, { workflowId: binding.publishedWorkflowId });
+      if (binding.role === "image" && rejectImageAuthorization) {
+        rejectImageAuthorization = false;
+        const execution: RuntimeExecution = { id: workflowRunId, workflow_id: binding.publishedWorkflowId,
+          status: "failed", outputs: null, diagnosticError: "Booklet authorization transport failed" };
+        saved.set(workflowRunId, execution);
+        return { kind: "execution" as const, execution };
+      }
+      // Exercise the published workflow's HTTP callback, not only the repository:
+      // replacements can carry a publication amendment absent from the run baseline.
+      const claim = binding.role === "image" ? await (async () => {
+        saved.set(workflowRunId, { id: workflowRunId, workflow_id: binding.publishedWorkflowId, status: "running", outputs: {} });
+        const http = createBookletRunnerHttp({ database: () => database, config: () => ({ enabled: true, config }),
+          store: () => store, runtime: () => runtime, mutate: async action => action() });
+        const response = await http.tool(new Request(`${config.publicOrigin}/api/experiments/booklet-tools/authorize`, {
+          method: "POST", headers: { "x-booklet-tool-key": config.callbackKey }, body: JSON.stringify(identity),
+        }), "authorize");
+        const payload = await response.json();
+        expect(response.status, JSON.stringify(payload)).toBe(200);
+        return { started: payload.data.started as boolean,
+          realImageRequest: JSON.parse(payload.data.requestJson) as NonNullable<Awaited<ReturnType<typeof repository.claimOperation>>["realImageRequest"]> };
+      })() : await repository.claimOperation({ ...identity, nowMs: now() }, { workflowId: binding.publishedWorkflowId });
       expect(claim.started, `claim ${binding.role}/${binding.taskId}`).toBe(true);
       const operation = (await repository.getOperation(input.operationId))!;
       let outputs: Record<string, unknown>;
@@ -219,6 +241,7 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
       config.real!.bindings.find(b => b.role === "image")!.publishedWorkflowId = randomUUID();
     },
     replacementService: () => createImageReplacementService({ database, config, store, runtime, now }),
+    rejectNextImageAuthorization: () => { rejectImageAuthorization = true; },
     parkingService: () => createImageReplacementParkingRecovery({ database, config, store, runtime, now }),
     cycle: () => createExperimentDispatcher({ database, config, runtime, store: () => store, mutate: async fn => fn(), now }).cycle(),
     expireOperation: () => { clock += 300_001; vi.spyOn(Date, "now").mockImplementation(now); },
@@ -241,7 +264,7 @@ async function advance(env: Awaited<ReturnType<typeof setup>>, step: number) {
 }
 
 describe("Real shared journey with fake providers and durable originals", () => {
-  it("replaces one explicitly approved unknown image and completes Kid with its original liability intact", async () => {
+  it.each([false, true])("replaces one explicitly approved unknown image and completes Kid (authorization failure=%s)", async authorizationFailure => {
     const env = await setup("playful_kid", "execution_v2");
     env.failNextImage("unknown_outcome", "J13");
     for (let step = 0; step < 180; step++) {
@@ -297,13 +320,40 @@ describe("Real shared journey with fake providers and durable originals", () => 
     expect(await env.replacementService().approve(input)).toMatchObject({ replacementOperationId: receipt.replacementOperationId, reused: true });
     expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
     await expect(env.replacementService().approve({ ...input, reference: "different terms" })).rejects.toThrow("different terms");
+    let finalReplacementId = receipt.replacementOperationId;
+    if (authorizationFailure) {
+      env.rejectNextImageAuthorization();
+      await env.advance();
+      const failed = (await env.repository.getOperation(finalReplacementId))!;
+      expect(failed).toMatchObject({ state: "failed", reservationCount: 0, safeFailure: "definite_failure" });
+      const counters = (await env.repository.getRun(env.runId))!.counters;
+      await expect(env.replacementService().preview(env.runId, failed._id)).rejects.toThrow();
+      env.expireOperation();
+      const retrieve = vi.mocked(env.runtime.retrieve), originalRetrieve = retrieve.getMockImplementation()!;
+      retrieve.mockImplementationOnce(async (...args) => {
+        const result = await originalRetrieve(...args);
+        return result.kind === "execution" ? { ...result, execution: { ...result.execution, status: "stopped" } } : result;
+      });
+      await expect(env.replacementService().preview(env.runId, failed._id)).rejects.toThrow("proven terminal");
+      const next = await env.replacementService().preview(env.runId, failed._id);
+      expect(next).toMatchObject({ previousAttemptKind: "unclaimed_failure", retainedLiabilityMicrodollars: 0 });
+      const nextInput = { ...input, operationId: failed._id, approvalId: randomUUID(),
+        reference: "explicit approval after terminal authorization failure",
+        expectedRevision: next.expectedRevision, expectedCampaignRevision: next.expectedCampaignRevision,
+        previewDigest: next.previewDigest, expiresAtMs: next.expiresAtMs, totals: next.totals };
+      const nextReceipt = await env.replacementService().approve(nextInput);
+      expect((await env.repository.getRun(env.runId))!.counters).toEqual(counters);
+      expect((await env.repository.getOperation(failed._id))!.deadlineAtMs).toBe(failed.deadlineAtMs);
+      expect(await env.replacementService().approve(nextInput)).toMatchObject({ reused: true });
+      finalReplacementId = nextReceipt.replacementOperationId;
+    }
     for (let step = 0; step < 180; step++) {
       if ((await env.repository.getRun(env.runId))!.status === "completed") break;
       await advance(env, step);
     }
     const complete = (await env.repository.getRun(env.runId))!;
     expect(complete.status).toBe("completed");
-    expect(complete.imageReplacementApprovals).toHaveLength(1);
+    expect(complete.imageReplacementApprovals).toHaveLength(authorizationFailure ? 2 : 1);
     expect(complete.executionAmendments).toHaveLength(1);
     expect(complete.execution!.profileHash).not.toBe(complete.executionAmendments![0].profileHash);
     expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
@@ -312,7 +362,7 @@ describe("Real shared journey with fake providers and durable originals", () => 
     expect(operations.filter(op => op.realReportPreparation).map(op => op.state)).toEqual(["succeeded", "succeeded"]);
     await withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, complete));
     expect(env.originals.size).toBe(9);
-    const replacement = operations.find(op => op._id === receipt.replacementOperationId)!;
+    const replacement = operations.find(op => op._id === finalReplacementId)!;
     const late = { ...JSON.parse(replacement.realImageObservation!.resultJson), requestDigest: original.realImagePreparation!.requestDigest };
     const beforeLate = await env.database.collections.experiment_campaigns.findOne({ _id: env.campaignId });
     await env.repository.observeRealImage({ runId: env.runId, operationId: original._id, workflowRunId: original.workflowRunId!,

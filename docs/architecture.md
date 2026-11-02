@@ -19,6 +19,13 @@ only this proved supersession; late original evidence cannot replace current
 assets or settle twice. A separate execution amendment records reviewed diagnostic
 adapter/publication changes for new operations. Historical operations retain their
 original profile and publication interpretation.
+  The same explicit approval can supersede a terminal image workflow that failed
+  before authorization. This requires an expired deadline, zero reservations,
+  no verified authorization or saved result, and authenticated terminal readback
+  against that operation's saved publication. The failed operation remains saved.
+  Its linked approval permits accounting to recognize zero provider calls; it
+  does not remove earlier unknown liabilities. Failed page-batch ownership moves
+  to the newly approved operation only after source and original-byte checks.
 
 External errors are retained on existing run/operation records after redaction.
 The selected-run diagnostic endpoint uses projected, twenty-operation pages;
