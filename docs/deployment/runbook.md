@@ -22,6 +22,20 @@ those resources or production configuration.
 
 ### Supported recovery candidate
 
+For a successful, settled Real tester or judge with an unsaved report, the
+candidate advertises `settled-report-completion` and uses snapshot scope
+`settled-report-completion-v1`. Use the existing `candidate-reconcile` flow with
+the exact run, operation and stable revision. Fresh Dify GET must match its saved
+successful wrapper. Closed quiet admission, an expired provider deadline and
+absent completion claims are required. Apply uses normal report completion and
+returns `report_completed`; the run remains paused. It preserves counters,
+creative records, prior reservations and approved unknown-image liability.
+It makes no provider POST and grants no retry or allowance. Reconcile a lost
+acknowledgement from the private checkpoint. Deploy the same reviewed candidate
+source before reopening admission and using normal Resume for remaining reports.
+The installed dispatcher must accept the bounded `result_transaction` diagnostic
+phase before this candidate is used; do not bypass response validation.
+
 The replacement candidate adds `image-replacement-parking` through the same
 `candidate-reconcile` preview/apply flow. Supply the exact run, image operation
 and current revision. Preview requires a terminal failed/stopped Dify execution,

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -33,6 +33,7 @@ import type { RuntimeExecution, WorkflowRuntime } from "@/lib/experiment-runner/
 import { closeTestDatabase, createTestDatabase } from "@/tests/helpers/mongodb";
 import { m4TestPolicy } from "@/tests/helpers/m4-policy";
 import { OperationBudgetExpired } from "@/lib/operations/budget";
+import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
 
 const databases: Database[] = [], roots: string[] = [];
 afterEach(async () => {
@@ -85,6 +86,19 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
   let imageFailureNeedsReferences = false;
   let rejectImageAuthorization = false;
   let reportStatus = "completed";
+  let reportSaveFailure = false;
+  const operationCollection = database.collections.experiment_operations;
+  const originalUpdate = operationCollection.findOneAndUpdate.bind(operationCollection);
+  vi.spyOn(operationCollection, "findOneAndUpdate").mockImplementation(async (...args) => {
+    if (reportSaveFailure && !Array.isArray(args[1]) && args[1].$set?.resultFinalizationClaim) {
+      const operation = await operationCollection.findOne(args[0]);
+      if (operation?.role === "tester" && operation.realReportPreparation) {
+        reportSaveFailure = false;
+        throw new OperationBudgetExpired();
+      }
+    }
+    return originalUpdate(...args);
+  });
   let imageFailureTask: "J13" | null = null;
   const uploads = new Map<string, Uint8Array>();
   const uploadReference = vi.fn(async (_binding: BookletRunnerConfig["bindings"][number], _runId: string, bytes: Uint8Array) => {
@@ -246,6 +260,8 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
     replacementService: () => createImageReplacementService({ database, config, store, runtime, now }),
     rejectNextImageAuthorization: () => { rejectImageAuthorization = true; },
     parkingService: () => createImageReplacementParkingRecovery({ database, config, store, runtime, now }),
+    reportRecovery: () => createSettledReportRecovery({ database, config, store, runtime, now }),
+    failNextReportSave: () => { reportSaveFailure = true; },
     cycle: () => createExperimentDispatcher({ database, config, runtime, store: () => store, mutate: async fn => fn(), now }).cycle(),
     expireOperation: () => { clock += 300_001; vi.spyOn(Date, "now").mockImplementation(now); },
     elapseObservation: (milliseconds: number) => { clock += milliseconds; },
@@ -271,20 +287,11 @@ describe("Real shared journey with fake providers and durable originals", () => 
   it("materializes a settled Real tester after slow inspection without renewing or replaying its request", async () => {
     const env = await setup("playful_kid", "execution_v2");
     const collection = env.database.collections.experiment_operations;
-    const update = collection.findOneAndUpdate.bind(collection);
-    let injected = false;
-    vi.spyOn(collection, "findOneAndUpdate").mockImplementation(async (...args) => {
-      if (!injected && !Array.isArray(args[1]) && args[1].$set?.resultFinalizationClaim) {
-        const operation = await collection.findOne(args[0]);
-        if (operation?.role === "tester" && operation.realReportPreparation) {
-          injected = true;
-          throw new OperationBudgetExpired();
-        }
-      }
-      return update(...args);
-    });
-    for (let step = 0; step < 180 && !injected; step++) await env.advance();
-    expect(injected).toBe(true);
+    env.failNextReportSave();
+    for (let step = 0; step < 180; step++) {
+      await env.advance();
+      if ((await env.repository.getRun(env.runId))!.status === "blocked") break;
+    }
     const blocked = (await env.repository.getRun(env.runId))!;
     expect(blocked).toMatchObject({ status: "blocked", safeFailure: "unknown_outcome" });
     const report = (await env.repository.getOperation(blocked.activeOperationId!))!;
@@ -410,10 +417,49 @@ describe("Real shared journey with fake providers and durable originals", () => 
       expect(await env.replacementService().approve(nextInput)).toMatchObject({ reused: true });
       finalReplacementId = nextReceipt.replacementOperationId;
     }
+    if (authorizationFailure) env.failNextReportSave();
+    let reportRecovered = false;
     for (let step = 0; step < 180; step++) {
       if ((await env.repository.getRun(env.runId))!.status === "completed") break;
-      await advance(env, step);
+      if (!authorizationFailure || reportRecovered) { await advance(env, step); continue; }
+      await env.advance();
+      const current = (await env.repository.getRun(env.runId))!;
+      if (current.status !== "blocked") continue;
+      const report = (await env.repository.getOperation(current.activeOperationId!))!;
+      expect(report).toMatchObject({ role: "tester", state: "unknown", m4Observation: { issue: null } });
+      env.expireOperation();
+      const recovery = env.reportRecovery();
+      const reportTarget = { runId: env.runId, operationId: report._id, expectedRevision: current.revision };
+      await expect(recovery.preview({ ...reportTarget, expectedRevision: current.revision + 1 })).rejects.toThrow("revision_changed");
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id },
+        { $set: { resultFinalizationClaim: { id: randomUUID(), expiresAtMs: Date.now() + 60_000 } } });
+      await expect(recovery.preview(reportTarget)).rejects.toThrow("settled_report_ineligible");
+      await env.database.collections.experiment_operations.updateOne({ _id: report._id }, { $set: { resultFinalizationClaim: null } });
+      const reportPreview = await recovery.preview(reportTarget);
+      await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: true } });
+      expect(await recovery.verifyUnapplied(reportTarget, reportPreview.previewDigest)).toMatchObject({ outcome: "unapplied" });
+      const beforeStarts = vi.mocked(env.runtime.start).mock.calls.length;
+      let reportSnapshot;
+      await recovery.apply(reportTarget, reportPreview.previewDigest, async saved => { reportSnapshot = saved.snapshot; });
+      expect(await recovery.verifyCompleted(reportTarget, reportSnapshot!)).toMatchObject({ outcome: "report_completed", providerPosts: 0 });
+      const originalEntry = [...env.originals.entries()][0];
+      const originalAsset = (await env.database.collections.assets.findOne({ _id: originalEntry[0] }))!;
+      const originalPath = path.join(env.root, originalAsset.uri);
+      await writeFile(originalPath, new Uint8Array([1, 2, 3]));
+      await expect(recovery.verifyCompleted(reportTarget, reportSnapshot!)).rejects.toThrow();
+      await writeFile(originalPath, originalEntry[1]);
+      expect(await recovery.verifyCompleted(reportTarget, reportSnapshot!)).toMatchObject({ outcome: "report_completed" });
+      expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(beforeStarts);
+      expect((await env.repository.getOperation(original._id))!.realImageReservation).toEqual(retained);
+      expect(await env.repository.getOperation(report._id)).toMatchObject({ state: "succeeded", deadlineAtMs: report.deadlineAtMs,
+        workflowRunId: report.workflowRunId, m4Reservation: report.m4Reservation });
+      const paused = (await env.repository.getRun(env.runId))!;
+      expect(paused).toMatchObject({ status: "paused", counters: current.counters });
+      await env.database.collections.deployment_control.updateOne({ _id: "_staging" }, { $set: { maintenance: false } });
+      await env.repository.resume({ runId: env.runId, expectedRevision: paused.revision, nowMs: Date.now() });
+      reportRecovered = true;
     }
+    expect(reportRecovered).toBe(authorizationFailure);
     const complete = (await env.repository.getRun(env.runId))!;
     expect(complete.status).toBe("completed");
     expect(complete.imageReplacementApprovals).toHaveLength(authorizationFailure ? 2 : 1);
