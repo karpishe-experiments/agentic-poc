@@ -12,6 +12,7 @@ import { m4Hash, m4CanonicalJson } from "@/lib/experiment-runner/m4-request";
 import { realImageCharge, realImageResultSchema, verifyRealImageRequest } from "@/lib/experiment-runner/real-image-contract";
 import { assessRealReportProviderResult } from "@/lib/experiment-runner/real-report-provider-result";
 import { hasApprovedImageReplacement } from "@/db/experiment-image-replacement";
+import { isUnclaimedImageFailure } from "@/lib/experiment-runner/image-pre-provider-failure";
 import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 
 function invalid(): never { throw new Error("Execution accounting or ownership is incomplete."); }
@@ -35,6 +36,9 @@ export async function verifyExecutionAccounting(database: Database, session: Cli
     }
     if (operation.imageReplacement) {
       if (!await hasApprovedImageReplacement(database, session, run, operation)) invalid();
+      // An explicitly superseded workflow that never claimed authorization has
+      // no provider reservation or call to settle. Its failed identity is retained.
+      if (isUnclaimedImageFailure(operation)) continue;
       const reservation = operation.realImageReservation, observation = operation.realImageObservation, prepared = operation.realImagePreparation;
       if (!reservation || !observation || !prepared || operation.reservationCount !== 1 || operation.mode !== "real" ||
           reservation.campaignId !== campaign._id || reservation.profileHash !== snapshot.hash ||

@@ -4,6 +4,21 @@ Keep only verified, reusable lessons. This file does not mark M0 complete.
 
 ## Candidates
 
+### Exercise operation amendments through the HTTP authorization boundary
+
+The replacement fixture originally claimed operations directly through the
+repository. It passed while the live image callback rejected a valid recorded
+publication amendment with HTTP409. The HTTP handler used the run baseline;
+the repository correctly used the operation amendment. The regression first
+reproduced that mismatch, then completed through the real HTTP handler after
+correction. Keep provider fixtures at the same authorization boundary as the
+published workflow. A terminal workflow with zero authorization reservations
+also needs an explicit approval and accounting path before a new attempt; an
+unknown charged attempt must retain its hold. The focused persistence journey
+verifies both attempts, nine image objects and both reports without record repair.
+Promotion candidate: **Documentation** for integration-test boundaries and
+operation-specific execution configuration.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the

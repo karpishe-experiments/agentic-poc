@@ -37,6 +37,7 @@ import { runTiming, runAttention } from "@/lib/experiment-runner/run-summary";
 import { runAccounting } from "@/lib/experiment-runner/run-accounting";
 import { externalError, redactExternalError } from "@/lib/experiment-runner/external-errors";
 import { createImageReplacementService } from "@/db/experiment-image-replacement";
+import { operationConfiguration } from "@/lib/experiment-runner/execution-amendment";
 
 const identity = z.strictObject({ runId: opaqueIdSchema, operationId: opaqueIdSchema, workflowRunId: opaqueIdSchema, parentWorkflowRunId: opaqueIdSchema.nullable() });
 const imageIdentity = identity.extend({ inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -528,10 +529,16 @@ export function createBookletRunnerHttp(deps: { database?: () => Database; confi
         if (!operation || operation.runId !== body.runId || operation.mode !== "real" || operation.providerKind !== "image" ||
             operation.dispatchStartedAtMs == null || operation.parentWorkflowRunId !== body.parentWorkflowRunId ||
             operation.workflowRunId && operation.workflowRunId !== body.workflowRunId || !operation.realImagePreparation) return reply(409, "conflict");
-        const saved = savedConfigurationSchema.parse(JSON.parse(savedRun.configurationJson)).find(item => item.role === "image" && item.taskId === null);
-        const binding = state.config.real.bindings.find(item => item.role === "image" && item.taskId === null);
-        if (!saved || !binding || saved.appId !== binding.appId || saved.publishedWorkflowId !== binding.publishedWorkflowId || !binding.apiKey)
-          return reply(409, "conflict");
+        // A replacement uses its recorded amendment; older operations keep the
+        // run baseline. Never compare a new operation against the old publication.
+        let saved;
+        try { saved = operationConfiguration(savedRun, operation).find(item => item.role === "image" && item.taskId === null); }
+        catch { throw new ExperimentRepositoryError("conflict", "Image execution amendment is missing or invalid."); }
+        const candidates = state.config.real.bindings.filter(item => item.role === "image" && item.taskId === null);
+        const binding = candidates[0];
+        if (!saved || candidates.length !== 1 || !binding || saved.appId !== binding.appId ||
+            saved.publishedWorkflowId !== binding.publishedWorkflowId || !binding.apiKey)
+          throw new ExperimentRepositoryError("conflict", "Prepared image authorization does not match its approved operation publication.");
         const deadlineAtMs = (operation.deadlineAtMs ?? 0) - RECONCILIATION_RESERVE_MS;
         const remote = await (deps.runtime ?? createWorkflowRuntime)(state.config).retrieve(binding, body.workflowRunId,
           { deadlineAtMs: Math.min(deadlineAtMs, Date.now() + 30_000), signal: request.signal });
