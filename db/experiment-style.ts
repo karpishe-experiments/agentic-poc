@@ -12,7 +12,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { styleSampleRequests, type StyleSampleSources } from "@/lib/experiment-runner/reference-requests";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { verificationMetadata, verificationOperationExists, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftStyleVersionId: opaqueIdSchema,
   sampleOperationIds: z.array(opaqueIdSchema).length(2).refine((ids) => new Set(ids).size === 2) });
@@ -32,7 +32,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
   const { database, store } = input;
   const now = input.now ?? Date.now;
 
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata, attempt?: VerificationAttempt) {
     const options = { session };
     const run = metadata?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Style run was not found.");
@@ -40,23 +40,23 @@ export function createExperimentStyleAssembly(input: { database: Database; store
     // Only the exact dispatched unknown claim may read its current sources;
     // completed source images and subsequent dispatch still require publication.
     const recovered = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+      ? await verificationOperationExists(database, session, { _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
         mode: run.mode, providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
         $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "tester", taskId: null, subjectKind: "book", subjectId: run.bookletId },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
-          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
+          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, attempt) : false;
     // The original image callback can arrive before publication GET readback.
     // Permit source reads for that exact claimed unknown J13 operation only;
     // assembly mutations and later publication/approval checks remain unchanged.
     const imageOperationId = run.activeOperationId ?? run.imageReplacementParking?.operationId;
-    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: imageOperationId, runId: run._id,
+    const recoveredImage = !recovered && verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
+      ? await verificationOperationExists(database, session, { _id: imageOperationId, runId: run._id,
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
-        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
+        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, attempt) : false;
     // Read-only source verification for an explicitly reviewed continuation.
     // Assembly writes still require the ordinary idle states below.
     const failedImage = verificationOnly && run.status === "blocked" && run.safeFailure === "definite_failure" && !run.activeOperationId
@@ -181,7 +181,7 @@ export function createExperimentStyleAssembly(input: { database: Database; store
         version.createdBy !== "application" || !version.sourceVersionId || artifact.state !== "approved") invalid("Current assembled style approval is missing.");
     const content = parseReferenceProposal("J08", "assembled", json(version.contentJson)).content;
     const checked = await load({ runId: opaqueIdSchema.parse(identity.runId), draftStyleVersionId: version.sourceVersionId,
-      sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true, metadata);
+      sampleOperationIds: content.samples.map((sample) => sample.build.operationId) }, session, true, metadata, verification?.attempt);
     if (checked.current._id !== version._id) conflict("Style approval target changed.");
     if (verification?.verifyBytes === false) return;
     for (const asset of checked.assets) {

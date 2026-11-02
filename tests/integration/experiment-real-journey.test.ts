@@ -456,7 +456,23 @@ describe("Real shared journey with fake providers and durable originals", () => 
         { $set: { m4Observation: report.m4Observation } });
       const beforeStarts = vi.mocked(env.runtime.start).mock.calls.length;
       let reportSnapshot;
+      // Model repeated source-eligibility reads on the retained blocked tester.
+      // Each round trip costs two seconds; full tester bodies must never be
+      // fetched for these boolean probes. The normal lease remains 60 seconds.
+      const operationReads = env.database.collections.experiment_operations;
+      const originalFindOne = operationReads.findOne.bind(operationReads);
+      let eligibilityReads = 0;
+      const eligibilitySpy = vi.spyOn(operationReads, "findOne").mockImplementation(async (filter, options) => {
+        if (filter._id === report._id && filter.state === "unknown" && filter.reservationCount === 1) {
+          eligibilityReads++;
+          expect(options?.projection).toEqual({ _id: 1 });
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+        }
+        return originalFindOne(filter, options);
+      });
       await recovery.apply(reportTarget, reportPreview.previewDigest, async saved => { reportSnapshot = saved.snapshot; });
+      eligibilitySpy.mockRestore();
+      expect(eligibilityReads).toBe(3); // style, sheets, finals: exact predicates stay separate
       expect(await recovery.verifyCompleted(reportTarget, reportSnapshot!)).toMatchObject({ outcome: "report_completed", providerPosts: 0 });
       const originalEntry = [...env.originals.entries()][0];
       const originalAsset = (await env.database.collections.assets.findOne({ _id: originalEntry[0] }))!;

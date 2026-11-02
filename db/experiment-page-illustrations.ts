@@ -15,7 +15,7 @@ import { savedConfigurationSchema } from "@/lib/experiment-runner/config";
 import { validateExperimentImage } from "@/lib/experiment-runner/image-validation";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata } from "@/db/experiment-verification-metadata";
+import { verificationMetadata, verificationOperationExists } from "@/db/experiment-verification-metadata";
 import type { FailureReason } from "@/lib/contracts/experiment-failure";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, pageId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
@@ -69,10 +69,10 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     const run = snapshot?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Page illustration run was not found.");
     const recovery = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+      ? await verificationOperationExists(database, session, { _id: run.activeOperationId, runId: run._id,
         $or: [{ role: "tester" }, { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId,
           providerKind: "text", workflowRunId: { $ne: null }, verifiedWorkflowId: { $ne: null } }],
-        mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
+        mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, attempt) : false;
     if ((run.mode !== "simulated" && !hasExperimentImagePolicy(run)) || (!recovery && !["queued", "running", "paused", ...(verificationOnly ? ["completed"] : [])].includes(run.status)) || (!verificationOnly && run.activeOperationId)) {
       invalid("Page illustration assembly requires idle work with a simulated image policy.");
     }
