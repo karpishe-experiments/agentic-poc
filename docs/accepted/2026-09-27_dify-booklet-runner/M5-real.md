@@ -15,10 +15,10 @@ charge but is not a prerequisite for this approved replacement.
 ## Reusable approvals and diagnostics implementation checkpoint — 2026-11-01
 
 The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`, with eight saved
-images and one missing final page. Its original allowance remains USD5. The
+images and one missing final page. Its initial allowance was USD5. The
 retained estimate is USD0.561311 settled plus USD4.438689 reserved; reserved
-liability is not a verified invoice charge. No increase or replacement is yet
-authorized by this implementation request.
+liability is not a verified invoice charge. The accepted allowance amendment and
+replacement result are recorded below.
 
 The implementation extends the current allowance ledger for proactive and
 repeated finite increases on all eligible Balanced/Real runs. Active work reaches
@@ -61,8 +61,55 @@ uses a recorded diagnostic-only execution amendment after explicit approval.
 Exact Community readback now verifies both installed package identities. The
 operator accepted persistent unsigned installation for this Community instance;
 the [current signature policy](../../deployment/dify-community.md#baseline-and-targets)
-supersedes the earlier temporary-window restoration requirement. Deployment
-verification and the exact live replacement grant remain pending.
+supersedes the earlier temporary-window restoration requirement.
+
+Protected parking completed in workflow `41315723762`, with backup and
+post-start preservation checks. The original unknown operation and its liability
+remain intact. Staging PR #327 deployed commit
+`347d1577464547298f9f56db868a6947e5f54d0d`, image
+`sha256:02af32f48cce9bc6a90f7a4fb0750e195ac81b2de02757390b06e2f9ea317bd8`.
+The deployment observer timed out while the host continued; status workflow
+`41319054746` proved that the same request `41317119357-1` completed and was
+archived. Independent Check `41321239438` passed. No deployment replay occurred.
+Live readback verifies the allowance, diagnostic and replacement controls. On
+2026-11-02 the user submitted and received approval receipt
+`605e62ff-fc60-4532-acd5-3f9ab066ec78`, with reference `ssd`, for a USD10 total
+and one linked replacement for final page 3. This submitted total supersedes the
+earlier USD6 chat proposal. The original USD4.399989 unknown liability remains
+reserved. Limits remain 120 text / 12 images / 300 steps, revisions 1/1 and
+no-progress window 3, with zero automatic retries or successors.
+
+Replacement `e7aec432-0077-4351-80fa-eee1d12e3137` failed before provider
+authorization. Dify execution `27953b46-c84b-49a4-ab57-cd7336889fdc` received
+HTTP409 from Booklet authorization and stopped at `real_decode`; no image
+provider node ran. Diagnostics workflow `41400690957` confirms revision1605,
+blocked/definite failure, no active operation and zero replacement reservations.
+Counters remain 43 text / 9 image calls and 52 steps. This is not Kid completion.
+
+The defect was an HTTP-boundary comparison against the run's original image
+publication instead of the replacement operation's recorded execution amendment.
+The correction uses the operation-specific configuration and rejects missing,
+corrupt, duplicate or mismatched binding evidence. The regression journey first
+reproduced the HTTP409, then passed through the actual HTTP image authorization
+endpoint after correction: all seven disposable-persistence Real journeys and
+48 focused unit tests pass; typecheck and focused lint pass. These checks use
+fake providers. The correction is not yet deployed. The failed operation must
+remain evidence; another attempt requires a supported explicit approval path.
+
+The follow-up continuation implementation extends the existing replacement
+review to a terminal workflow that failed before authorization. It requires
+zero reservations, no authorization/result owner, an expired deadline and exact
+authenticated publication readback. Approval links a new operation and transfers
+only the matching failed page-batch item after current-source checks. Accounting
+recognizes this approved zero-charge supersession separately from the retained
+unknown image hold. The exact disposable-persistence chain passes through the
+failed authorization, another explicit approval, nine image objects, both
+reports and final accounting. All 64 focused unit/UI tests, typecheck and
+focused lint pass. All eight affected Real journeys pass, including legacy
+replacement behavior, Parent and Creator cases. Two isolated Chrome checks pass
+for unknown and unclaimed failures; each submits exactly one approval request
+against fake APIs. Two independent final reviews are clean. The extension is
+not deployed and grants no live attempt.
 
 Credential inventory impact: no new credential names, storage or transfer paths.
 Existing runtime credentials are used only by their existing consumers; error

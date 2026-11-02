@@ -53,3 +53,16 @@ it("renders retained provider HTML as text and reads only a selected diagnostic 
   expect(view.container.querySelector("img")).toBeNull();
   expect(fetcher.mock.calls[0][0]).toContain("/run/diagnostics?page=0");
 });
+
+it("distinguishes an unclaimed failure from retained unknown liability", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: { runId: "run", operationId: "failed",
+    expectedRevision: 8, expectedCampaignRevision: 3, previewDigest: "b".repeat(64), expiresAtMs: Date.now() + 300_000,
+    terminalStatus: "failed", previousAttemptKind: "unclaimed_failure", target: { taskId: "J13", subjectId: "page3" },
+    totals: { ...totals, maxMicrodollars: 10_000_000 }, settledMicrodollars: 500_000,
+    reservedMicrodollars: 4_500_000, retainedLiabilityMicrodollars: 0 } })));
+  render(<ImageReplacementReview runId="run" operationId="failed" onSaved={async () => true} />);
+  fireEvent.click(screen.getByText("Inspect original and prepare review"));
+  await screen.findByText(/This attempt failed before provider authorization/);
+  expect(screen.queryByText(/Original unknown liability \$0/)).toBeNull();
+  expect(screen.getByText("Approve exact allowance and one replacement")).toBeDisabled();
+});

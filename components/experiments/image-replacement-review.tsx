@@ -7,6 +7,7 @@ import { allowanceFields } from "./allowance-review";
 type Preview = { runId: string; operationId: string; expectedRevision: number; expectedCampaignRevision: number;
   previewDigest: string; expiresAtMs: number; terminalStatus: string; target: { taskId: string | null; subjectId: string };
   retainedLiabilityMicrodollars: number; totals: AllowanceTotals; settledMicrodollars: number; reservedMicrodollars: number;
+  previousAttemptKind?: "unclaimed_failure" | "unknown_outcome";
   executionAmendment?: { id: string; baseProfileHash: string; profileHash: string; publications: unknown } | null };
 const dollars = (n: number) => `$${(n / 1_000_000).toFixed(6)}`;
 
@@ -76,7 +77,8 @@ export function ImageReplacementReview({ runId, operationId, onSaved }: {
     {!uncertain && !receipt ? <button disabled={busy} onClick={() => void load()}>Inspect original and prepare review</button> : null}
     {preview ? <><p>Original {preview.operationId}; Dify {preview.terminalStatus}. Target {preview.target.taskId} · {preview.target.subjectId}.</p>
       <p>Estimated settled {dollars(preview.settledMicrodollars)} · Reserved {dollars(preview.reservedMicrodollars)}.
-        Original unknown liability {dollars(preview.retainedLiabilityMicrodollars)} remains reserved.</p>
+        {preview.previousAttemptKind === "unclaimed_failure" ? "This attempt failed before provider authorization and has no reservation. Earlier unknown liabilities remain reserved." :
+          <>Original unknown liability {dollars(preview.retainedLiabilityMicrodollars)} remains reserved.</>}</p>
       <p>One replacement image, then normal completion work. Automatic provider retries remain disabled.</p>
       {preview.executionAmendment ? <details><summary>Reviewed execution update</summary>
         <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(preview.executionAmendment, null, 2)}</pre></details> : null}
