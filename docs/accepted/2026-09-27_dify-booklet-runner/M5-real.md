@@ -60,7 +60,7 @@ The current run retains its original `dc755367...` profile; new replacement work
 uses a recorded diagnostic-only execution amendment after explicit approval.
 Exact Community readback now verifies both installed package identities. The
 operator accepted persistent unsigned installation for this Community instance;
-the [current signature policy](../../deployment/dify-community.md#baseline-and-targets)
+the [current signature policy](https://github.com/karpishe-experiments/agentic-poc/blob/master/docs/deployment/dify-community.md#baseline-and-targets)
 supersedes the earlier temporary-window restoration requirement.
 
 Protected parking completed in workflow `41315723762`, with backup and
