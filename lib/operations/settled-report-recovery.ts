@@ -1,4 +1,5 @@
 import type { Database } from "@/db/client";
+import type { ExperimentOperationDocument } from "@/db/documents";
 import { withMongoTransaction } from "@/db/client";
 import { createExperimentRepository } from "@/db/experiment-repository";
 import { verifyExecutionAccounting } from "@/db/experiment-execution-accounting";
@@ -36,6 +37,33 @@ function reportJson(value: unknown): string {
   });
 }
 const reportDigest = (value: unknown) => m4Hash(reportJson(value));
+const operationInvariant = (op: ExperimentOperationDocument) => reportDigest(omit(op,
+  ["state", "lifecycle", "safeFailure", "updatedAtMs", "resultFinalizationClaim",
+    "resultJson", "resultDigest", "materializationJson", "warningsJson"]));
+
+// Reconstruct only candidate prefixes in memory. A caller must match the full
+// original snapshot digest before accepting one. No diagnostic is removed from
+// storage. Retention eviction, edits and unrelated changes cannot match it.
+export function diagnosticAppendBaselines(op: ExperimentOperationDocument, nowMs: number) {
+  const errors = op.externalErrors;
+  if (!Array.isArray(errors) || errors.length === 0 || errors.length > 20 ||
+      new Set(errors.map(error => error.id)).size !== errors.length) return [];
+  const candidates: ExperimentOperationDocument[] = [];
+  for (let length = errors.length - 1; length >= 0; length--) {
+    const suffix = errors.slice(length);
+    if (!suffix.every(error => error.schemaVersion === "booklet_external_error_v1" && error.service === "booklet" &&
+      error.stage === "result_transaction" && error.attemptNumber === op.attempt &&
+      Number.isFinite(Date.parse(error.timestamp)) && Date.parse(error.timestamp) >= op.updatedAtMs &&
+      Date.parse(error.timestamp) <= nowMs)) continue;
+    candidates.push({ ...op, externalErrors: errors.slice(0, length) });
+    if (length === 0) {
+      const absent = { ...op };
+      delete absent.externalErrors;
+      candidates.push(absent);
+    }
+  }
+  return candidates;
+}
 
 // The existing candidate-recovery host owns admission, backup and quiescence.
 // Only the original settled report can materialize. No provider POST is exposed.
@@ -125,8 +153,7 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
     return { scope, rows: Object.fromEntries(Object.entries(inventory).map(([name, rows]) =>
       [name, Object.fromEntries(rows.map(row => [row._id, reportDigest(row)]))])),
     runInvariant: reportDigest(omit(run, ["revision", "updatedAtMs", "activeOperationId", "safeFailure", "status", "pauseRequested", "evaluationStatus"])),
-    operationInvariant: reportDigest(omit(op, ["state", "lifecycle", "safeFailure", "updatedAtMs", "resultFinalizationClaim",
-      "resultJson", "resultDigest", "materializationJson", "warningsJson"])),
+    operationInvariant: operationInvariant(op),
     campaignInvariant: reportDigest(campaign), bookletInvariant: reportDigest(booklet), campaignId: campaign._id, bookletId: booklet._id,
     countersDigest: reportDigest(run.counters), deadlineAtMs: op.deadlineAtMs!, requestDigest: op.m4Preparation!.requestDigest,
     evidenceDigest: op.m4Observation!.evidenceDigest!, wrapperDigest: op.m4Observation!.wrapperDigest!,
@@ -207,7 +234,21 @@ export function createSettledReportRecovery(deps: { database: Database; config: 
     proof((await preview(target, true)).previewDigest === expected, "state_changed");
     return { verified: true as const, outcome: "unapplied" as const, admission: "closed" as const, providerPosts: 0 };
   }
+  async function verifyDiagnosticUnapplied(target: RecoveryTarget, expected: string) {
+    const current = await preview(target, true);
+    const { op } = await state(target);
+    proof(reportDigest(op) === current.snapshot.rows.experiment_operations[op._id], "state_changed");
+    const matched = diagnosticAppendBaselines(op, now()).some(baseline => {
+      const reconstructed = { ...current.snapshot, operationInvariant: operationInvariant(baseline),
+        rows: { ...current.snapshot.rows, experiment_operations: {
+          ...current.snapshot.rows.experiment_operations, [op._id]: reportDigest(baseline) } } };
+      return digest(target, reconstructed) === expected;
+    });
+    proof(matched, "diagnostic_append_unproved");
+    return { verified: true as const, outcome: "unapplied" as const, admission: "closed" as const,
+      proof: "diagnostic_append_only" as const, providerPosts: 0 };
+  }
   const unsupported = async (): Promise<never> => { throw new BookletRecoveryError("settled_report_has_no_claim_release"); };
-  return { preview, apply, verifyCompleted, verifyUnapplied, deferCompletedVerification: true as const,
+  return { preview, apply, verifyCompleted, verifyUnapplied, verifyDiagnosticUnapplied, deferCompletedVerification: true as const,
     previewClaimRelease: unsupported, applyClaimRelease: unsupported, verifyClaimRelease: unsupported };
 }

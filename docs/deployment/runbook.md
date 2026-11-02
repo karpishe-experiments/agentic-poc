@@ -201,6 +201,20 @@ service with admission closed and retains the failed phase as `aborted-closed`.
 Then inspect the cause and preview a new recovery request. It does not reopen
 paid execution or retry a failed backup automatically.
 
+For an unsaved settled Real report, an appended `result_transaction` diagnostic
+can invalidate the exact abort hash even when business writes rolled back. A
+reviewed, checksum-pinned diagnostic abort verifier may be selected with
+`abort_proof_image` and `abort_proof_commit` in that same exact abort request.
+The installed canonical dispatcher must support these named arguments. It checks
+the helper's immutable image, commit, capability and unchanged schema before
+running the read-only proof. The original recovery candidate remains pinned.
+The verifier reconstructs diagnostic prefixes in memory and must reproduce the
+entire original preview digest. It preserves stored diagnostics and rejects
+edited history, unprovable retention eviction and all unrelated data changes.
+Only a successful proof permits the existing prior-app restart with admission
+closed. The journal records the proof image and commit; the application checkpoint
+and backup remain intact. This does not save the report or authorize execution.
+
 If inspection establishes that an interrupted request retained only an expired
 finalization claim, use a new reviewed candidate and request ID with
 `release_expired_claim="true"`, `original_request_id` and the exact original

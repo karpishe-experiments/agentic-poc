@@ -17,7 +17,7 @@ import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery,
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const inputSchema = z.strictObject({
-  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "inspect-blockers", "verify-prior-compatible",
+  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "verify-diagnostic-unapplied", "inspect-blockers", "verify-prior-compatible",
     "preview-claim-release", "apply-claim-release", "verify-claim-release"]),
   "run-id": id.optional(), "operation-id": id.optional(), "expected-revision": z.coerce.number().int().nonnegative().optional(),
   "evidence-dir": z.literal("/recovery").optional(), "preview-digest": sha.optional(),
@@ -49,7 +49,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
-      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "image-replacement-parking", "settled-report-completion", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "image-replacement-parking", "settled-report-completion", "diagnostic-append-unapplied", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = await inspectStep("environment", async () => getServerEnv());
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -118,6 +118,10 @@ async function main() {
   if (input.phase === "verify-unapplied") {
     if (!input["preview-digest"]) throw new BookletRecoveryError("preview_required");
     emit({ ...await service.verifyUnapplied(target, input["preview-digest"]), phase }); return;
+  }
+  if (input.phase === "verify-diagnostic-unapplied") {
+    if (!input["preview-digest"] || !("verifyDiagnosticUnapplied" in service)) throw new BookletRecoveryError("diagnostic_abort_unsupported");
+    emit({ ...await service.verifyDiagnosticUnapplied(target, input["preview-digest"]), phase }); return;
   }
   if (input.phase === "preview" || input.phase === "verify-closed") {
     // A supported pre-write abort restores the prior app with admission closed.
