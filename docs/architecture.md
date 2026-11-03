@@ -867,20 +867,20 @@ the run paused and remains in append-only campaign history. Ordinary Resume
 cannot clear a pending request. New page-image requests carry an explicit
 version tag for more than two approved revisions; untagged M4 requests retain
 their original two-revision validation and fingerprints. The UI shows the
-request, current liabilities and exact finite USD totals. No live M5 campaign
-or paid execution is established by this local implementation.
+request, current liabilities and exact finite USD totals. Live grants and outcomes
+are recorded in the [M5 exit evidence](accepted/2026-09-27_dify-booklet-runner/M5-real.md#real-kid-exit-evidence---2026-11-03); local implementation alone grants no spending.
 
 ## Artifact and decision flow
 
 ### Issue #65 local foundation
 
-The current full suite has eighteen Community bindings: manager, J01-J12,
-three testers, simulated image transport (including J13), and judge. Simulated
-acceptance is complete. Balanced Kid and Parent have verified generation with
-incomplete advisory evaluation; the admitted Creator is stopped at a J12
-preparation failure pending reviewed delivery of its exact continuation grant. The subsections
-below retain incremental foundation details; current live status is owned by the
-[M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md).
+The full suite has eighteen Community bindings: manager, J01-J12, three testers,
+image transport (including J13), and judge. Simulated and Balanced acceptance
+are complete under their recorded criteria. Real Kid completed with an approved
+replacement and retained unknown liability. The incremental foundation details
+below are historical; [M4](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
+and [M5](accepted/2026-09-27_dify-booklet-runner/M5-real.md#real-kid-exit-evidence---2026-11-03)
+own current acceptance evidence and remaining persona scope.
 
 The [Dify booklet experiment](accepted/2026-09-27_dify-booklet-runner/PRD.md)
 has a separate `dify_booklet_v1` booklet profile. Its current local foundation

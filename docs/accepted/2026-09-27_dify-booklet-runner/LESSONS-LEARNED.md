@@ -51,6 +51,16 @@ Also account for failure diagnostics written outside the failed transaction:
 they change full-row hashes even when report writes roll back. An abort must
 prove the difference; it must not ignore or delete diagnostic evidence.
 
+The reviewed correction subsequently saved the original tester and passed full
+verification before and after restart. Normal Resume admitted one judge; its late
+successful result paused the run again. A final normal Resume completed the run
+at revision 1642 with unchanged 45 text/10 image/55 step counters. A saved report
+and a terminal run are separate checkpoints. After late-result recovery, inspect
+the run's pause state and complete normal final verification; do not rerun the
+provider. The [Kid exit evidence](M5-real.md#real-kid-exit-evidence---2026-11-03)
+records the protected reads and deployment checks. The trace's stale failed
+attempt label is a presentation finding, not evidence that the saved result failed.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the

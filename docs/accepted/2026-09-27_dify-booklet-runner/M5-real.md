@@ -1,6 +1,6 @@
 # M5 — Staging transition and staged Real acceptance
 
-**State:** In progress; Real Kid acceptance is blocked. **Coverage:** AC04–AC13.
+**State:** Real Kid completed with an approved replacement on 2026-11-03; Parent and Creator Real acceptance remain pending. **Coverage:** AC04–AC13.
 **Predecessor:** [M4](M4-balanced.md). Apply [EXECUTION](EXECUTION.md).
 
 For this milestone, "uninterrupted" means no manual data or output repair.
@@ -12,206 +12,119 @@ disclosed. This is an explicit new operation, not a retry of the original call
 or a manual data/output repair. Provider-log access can reconcile the original
 charge but is not a prerequisite for this approved replacement.
 
-## Reusable approvals and diagnostics implementation checkpoint — 2026-11-01
+## Real Kid exit evidence - 2026-11-03
 
-The current Kid remains `6f1c5716-9f27-4714-88fd-989c196b7a04`. The approved
-replacement saved its missing final page; tester materialization and judge
-completion remain blocked. Its initial allowance was USD5 and its accepted
-total is USD10. The earlier image liability remains reserved and is not a
-verified invoice charge. The retained tester cost snapshot estimates USD5.092238
-of total exposure, including reserved liability. Final accounting and all nine
-current image-byte checks remain acceptance requirements.
+[The Runaway Kite Rescue](https://booklet-staging.uniwares.co.uk/experiments/booklet-runs/6f1c5716-9f27-4714-88fd-989c196b7a04)
+completed at revision 1642. Protected diagnostics `41597028300` confirms
+`completed`, no active operation, no preparation and no safe failure. This is
+**completed with an approved replacement**, not an uninterrupted provider history.
+Normal final verification checked all thirteen responsibilities, current exact
+approvals and dependencies, nine current original image objects, both current
+reports and retained accounting. No direct record or output repair was used.
 
-The implementation extends the current allowance ledger for proactive and
-repeated finite increases on all eligible Balanced/Real runs. Active work reaches
-a safe checkpoint; a manual pause remains paused. A budget-only decision cannot
-clear an unknown outcome. A separate image-replacement approval retains the
-original hold and creates one linked operation after exact source/owner checks.
-Diagnostic-only execution amendments preserve original profile snapshots.
-
-Local proof includes a disposable-persistence Kid journey through deployment
-parking, concurrent identical approval, replacement storage, nine original image
-objects, both reports and accounting with the original hold. Late original
-evidence cannot overwrite the replacement. The allowance ledger's 25 tests and
-the adapters' 21 image / 14 text-report tests passed. The 27 page-batch tests
-include amended pause/clarification bindings. Three isolated browser flows cover
-allowance review, blocked diagnostics and recovered completion without provider
-traffic. Both Linux deployment suites, CI-level ShellCheck and typecheck passed.
-Two independent source reviews are clean. PR #325 merged as
-`0686b9c767d3dffc401e7a7cb85e4b7e2ca351e2`; all 871 unit tests and CI passed.
-
-The image result-handler correction is published as
-`d016b1e3-93a6-4e9b-8509-de2a9b3568ad`, graph hash
-`32d44724b3cfd3db9bbc143f93cfe55422e9f18b461283c2023418f91f2e89b4`.
-Readback proves that only `real_image_result` changed; variables, features and
-disabled retries are preserved. No provider call was made. The registered MCP
-save rejected a legacy environment field without changing the draft. The
-documented compatibility client saved the graph, and MCP published/read it back.
-
-The release candidate pins text dev7 and image dev3 to the reviewed packages:
-
-| Candidate | Archive SHA-256 |
+| Evidence | Retained value |
 | --- | --- |
-| Text dev7 | `a4eb441d0ac3ca84ccbe18b0f0be93b20c088ed6740a486dc490e66f14d24d53` |
-| Image dev3 | `5f34caaee4b58e672eb3117ad0eb39fb4905049487844609c0b60d681a3a68ef` |
+| Run / booklet | `6f1c5716-9f27-4714-88fd-989c196b7a04` / `19bd33c4-00e1-4661-840d-3aa35391c986` |
+| Campaign / predecessor | `44c77424-231b-47b1-8d51-3cb1e4fad7a0` / `b9151945-114d-4be2-809e-18117ed08c62` |
+| Output | Cover plus three single-scene story pages; two style samples, two character sheets and one location sheet |
+| Final counters | 45 logical/payable text calls, 10 logical/payable image calls, 55 steps |
+| Finite limits | USD 10 total; 120 text calls, 12 image calls, 300 steps; text/image revisions 1/1; no-progress 3 |
+| Estimated settled / reserved | USD 0.750597 / USD 4.440489; total exposure USD 5.191086 |
+| Invoice cost | Unavailable; the original USD 4.399989 unknown image liability remains reserved and might still be charged |
+| Tester | Operation `c9d68073-2377-48d0-8a49-9666d039d303`; Dify `a3664e77-2fa8-4f76-81b5-e735a98fb5b9`; saved result and materialization |
+| Judge | Operation `4a942c0f-911e-467f-9966-24b3b30441ec`; Dify `ca5b872e-935a-471f-93c6-76099e986d50`; saved result and materialization |
 
-Its profile hash is
+The original image `3e5901ff-b688-40ec-a237-5dd7ec4d04f3` remains unknown.
+The first linked replacement `e7aec432-0077-4351-80fa-eee1d12e3137` failed
+before authorization with zero reservations. Neither was replayed or erased.
+The operator's recorded USD 10 approval superseded the earlier USD6 proposal.
+A further explicit approval within that unchanged total produced receipt
+`52b9d8bc-398e-4c83-95e9-84e411087e6a` and replacement
+`9563e2e5-1401-4962-b563-39e05e86c1d0`. Its original PNG is 1748302 bytes,
+SHA-256 `ee73030df1d10b8b94802ad674c929dde2da13516e684cdbee8c7be71513092d`.
+The original hold and failed-attempt evidence remain in cumulative accounting.
+There were no automatic provider retries or successors.
+
+The nine current asset IDs are retained under normal asset routes:
+
+| Role | Asset ID |
+| --- | --- |
+| Style samples | `63f1c070-b23b-4df7-a506-e59541554564`, `4fd41ad5-8d7f-49d5-8f68-ebaaa58cab72` |
+| Inventor / robot sheets | `bd2be6f4-f167-4d1b-9ba6-659fc56be6a8`, `8a78d410-9970-43bf-bcdb-04c80ebbff60` |
+| Location sheet | `5fc1be4d-e5b1-481e-8f10-288d6a43ca65` |
+| Cover / page 1 | `fac6ecc9-df9c-45b5-88a1-6f1104d3a363`, `a51c0aec-dc92-4174-ac7e-e2768162f30e` |
+| Page2 / page 3 | `738e95b6-7d99-4d23-aca0-fdf554b755f2`, `9563e2e5-1401-4962-b563-39e05e86c1d0` |
+
+Browser readback after deployment showed all current J01-J13 artifacts approved,
+all nine original asset links, both report entries and the same counters and
+accounting. The final protected readback proves completion after normal Resume.
+Both multimodal reports inspected the four finals in cover-to-page 3 order;
+their manifest digest is
+`cf060339c4fe870d45526f462ff891c986856a56ddbb1fb9d478f48f967be8e6`.
+Tester used 36165 input/592 output tokens; judge used 36167 input/753 output.
+Their Dify execution durations were 34.126266 and 34.24144 seconds. Wall time
+includes long approval/recovery pauses and is not a provider performance measure.
+
+Both reports found a coherent, reassuring rescue with recognizable characters
+and setting. All finals are 1024x1024 rather than the approved 1800x2700 portrait
+canvas. Tester also found missing planned cover narration/dialogue. These are
+retained quality findings, not permission for more images. The trace displays
+`Attempt: failed` for the late recovered reports while their authoritative
+operation states are `succeeded`; diagnostics confirms both saved results and
+materializations. Keep this presentation inconsistency for the improvement review.
+
+## Reusable approvals and diagnostics implementation checkpoint - 2026-11-03
+
+The delivered allowance ledger supports proactive/repeated finite increases and
+separate exact image-replacement approvals. Unknown outcomes retain their holds;
+an allowance increase alone cannot clear them. The operation's recorded execution
+amendment governs callback authorization. Read-only style and sheet verification
+accept the same proven unclaimed-failure state; assembly and dispatch remain
+separate. Regression coverage includes the actual HTTP authorization boundary,
+a story-page target with sheet references, concurrent approval, nine original
+images, both reports and retained old liability.
+
+The retained tester had completed remotely and settled usage before its save
+window expired. Recovery separates normal save from full verification, reserves
+the unchanged finalization lease and reuses projected eligibility probes only
+within one transaction attempt. It does not extend the provider deadline or
+replay the provider. An earlier failed transaction appended a diagnostic outside
+the rollback; the read-only abort proof reproduced the entire original preview
+digest from eligible prefixes in memory without changing stored errors.
+
+The reviewed dispatcher installation and diagnostic-only abort `41588548013`
+passed. Protected recovery `41589144087`, request
+`issue65-m5-report-phase3-20261103`, saved the tester through the normal repository
+and passed full verification before and after prior-app restart. It retained
+backup `staging-recovery-issue65-m5-report-phase3-20261103`. Staging PR #334 merged
+as `fa1e4f14e1dce1eb6b548bc308d280df2a33fcfe`, with the same recovered source
+tree. Deployment request `41591247099-1` outlived its GitHub client wait;
+status `41592988910` proved completed/archived without replay. The serving image is
+`sha256:022edfda1bd7210e09816329974e0ca71888ac3966eb75b2cafe0d4b8d5ced98`.
+Independent Check `41593064619` passed. Fresh diagnostics `41593201091` proved
+paused revision 1627 with the tester saved and unchanged counters. Normal Resume
+then admitted the judge; its late successful result was saved and paused normally.
+Diagnostics `41596061251` proved both reports saved at revision 1640. A final normal
+Resume led to the completed revision 1642 without another provider call.
+Historical checkpoints and backups remain evidence; do not replay these applies.
+
+The run retains original profile
+`dc7553679260b7f64df9cbf957ab5ef9fbbf64db00f25e88072efcd5a3ead83f`.
+The approved diagnostic amendment uses
 `e0138a67f748fc39301e8df6ee99284e9cafd51280f60eff972b9a4046edeb3d`.
-Models, prices, request definitions and other publications remain unchanged.
-The current run retains its original `dc755367...` profile; new replacement work
-uses a recorded diagnostic-only execution amendment after explicit approval.
-Exact Community readback now verifies both installed package identities. The
-operator accepted persistent unsigned installation for this Community instance;
-the [current signature policy](../../deployment/dify-community.md#baseline-and-targets)
-supersedes the earlier temporary-window restoration requirement.
+Fresh Community readback verifies text dev7 and image dev3 identities, the judge
+publication `de9614e4-dbb6-4286-9a15-43d570c963bc`, image publication
+`d016b1e3-93a6-4e9b-8509-de2a9b3568ad`, and disabled retries. The operator accepted
+persistent unsigned installation; the [current signature policy](../../deployment/dify-community.md#baseline-and-targets)
+supersedes earlier temporary-window instructions.
 
-Protected parking completed in workflow `41315723762`, with backup and
-post-start preservation checks. The original unknown operation and its liability
-remain intact. Staging PR #327 deployed commit
-`347d1577464547298f9f56db868a6947e5f54d0d`, image
-`sha256:02af32f48cce9bc6a90f7a4fb0750e195ac81b2de02757390b06e2f9ea317bd8`.
-The deployment observer timed out while the host continued; status workflow
-`41319054746` proved that the same request `41317119357-1` completed and was
-archived. Independent Check `41321239438` passed. No deployment replay occurred.
-Live readback verifies the allowance, diagnostic and replacement controls. On
-2026-11-02 the user submitted and received approval receipt
-`605e62ff-fc60-4532-acd5-3f9ab066ec78`, with reference `ssd`, for a USD10 total
-and one linked replacement for final page 3. This submitted total supersedes the
-earlier USD6 chat proposal. The original USD4.399989 unknown liability remains
-reserved. Limits remain 120 text / 12 images / 300 steps, revisions 1/1 and
-no-progress window 3, with zero automatic retries or successors.
-
-Replacement `e7aec432-0077-4351-80fa-eee1d12e3137` failed before provider
-authorization. Dify execution `27953b46-c84b-49a4-ab57-cd7336889fdc` received
-HTTP409 from Booklet authorization and stopped at `real_decode`; no image
-provider node ran. Diagnostics workflow `41400690957` confirms revision1605,
-blocked/definite failure, no active operation and zero replacement reservations.
-Counters remain 43 text / 9 image calls and 52 steps. This is not Kid completion.
-
-The defect was an HTTP-boundary comparison against the run's original image
-publication instead of the replacement operation's recorded execution amendment.
-The correction uses the operation-specific configuration and rejects missing,
-corrupt, duplicate or mismatched binding evidence. The regression journey first
-reproduced the HTTP409, then passed through the actual HTTP image authorization
-endpoint after correction: all seven disposable-persistence Real journeys and
-48 focused unit tests pass; typecheck and focused lint pass. These checks use
-fake providers. The correction is not yet deployed. The failed operation must
-remain evidence; another attempt requires a supported explicit approval path.
-
-The follow-up continuation implementation extends the existing replacement
-review to a terminal workflow that failed before authorization. It requires
-zero reservations, no authorization/result owner, an expired deadline and exact
-authenticated publication readback. Approval links a new operation and transfers
-only the matching failed page-batch item after current-source checks. Accounting
-recognizes this approved zero-charge supersession separately from the retained
-unknown image hold. The exact disposable-persistence chain passes through the
-failed authorization, another explicit approval, nine image objects, both
-reports and final accounting. All 64 focused unit/UI tests, typecheck and
-focused lint pass. All eight affected Real journeys pass, including legacy
-replacement behavior, Parent and Creator cases. Two isolated Chrome checks pass
-for unknown and unclaimed failures; each submits exactly one approval request
-against fake APIs. Two independent final reviews are clean. Source PR #329
-merged as `b7a52cb2461fa57aca252d6675161e1c082b7f61`; staging PR #330 merged
-as `8eb1cd743bcb7dff29d045570457a9fc4967c2de`. Both CI runs passed.
-
-Deployment `41414789192` timed out only in its client observer while the same
-host request continued. Exact status `41416516841` proves
-`41414789192-1` completed and archived, with image
-`sha256:b22e4a33f21dc5b61aafaab7d04361df62628ac763fdcc3b5cd75f39c9bc2db0`
-and backup `staging-20261102T084441Z-bf5cef7e6534c03f`. No replay occurred.
-The first queued Check encountered HTTP502 during the active host operation;
-independent Check `41416624549` passed after host completion. A further
-image-attempt approval and live completion remain pending.
-
-The live preview then rejected the failed attempt with "Sheet assembly requires
-idle work with an image policy." No provider call occurred. The earlier fixture
-had failed the cover, so it checked style evidence but not referenced sheets.
-The revised regression requires a story image with original reference bytes and
-reproduced the same rejection. The correction permits read-only sheet verification
-under the existing proven unclaimed-failure predicate, matching the style reader;
-assembly writes and dispatch eligibility remain unchanged. All eight affected
-Real journeys, 21 focused unit tests, typecheck and focused lint pass. Two
-independent code reviews are clean. All ten sheet assembly tests also pass after
-replacing a stale message assertion with its rejection code.
-Source PR #331 merged as `465cae769ece404aacae5900089b250a668c2b6c`;
-staging PR #332 merged as `dff8763aef7c1810894e4dc8954834eb02ca8f95`.
-Both CI runs passed. Deployment `41424853241` again outlived its client observer;
-exact host status `41435123989` proves request `41424853241-1` completed and
-archived without replay, using image
-`sha256:9200509c4baec5e7e1444509a0b073ef4a87a445ce48fbc04db2636a800c2621`
-and backup `staging-20261102T100217Z-37031f4e52352531`.
-Independent Check `41435224938` passed. The refreshed live preview succeeds for
-failed operation `e7aec432-0077-4351-80fa-eee1d12e3137`, at run revision1605
-and campaign revision105. It confirms an unclaimed failure with zero liability,
-the unchanged USD10 allowance, USD0.561311 estimated settled and USD4.438689
-reserved. The user explicitly approved one new linked page-3 image attempt and
-normal verification/tester/judge completion within that existing total. Limits
-remain 120 text / 12 images / 300 steps, revisions1/1 and no-progress3, with
-zero automatic retries or successors. The original unknown hold remains.
-Computer Use could not verify Chrome's URL and stopped before submission;
-the operator received normal-UI steps. The operator then supplied accepted receipt
-`52b9d8bc-398e-4c83-95e9-84e411087e6a`, creating linked operation
-`9563e2e5-1401-4962-b563-39e05e86c1d0`. Image workflow
-`1fa085ff-278d-4a80-9855-7c36300efb8a` succeeded in77.184059 seconds.
-Diagnostics `41436568227` confirms saved result and materialization, with
-43 text / 10 image calls and53 steps. Tester operation
-`c9d68073-2377-48d0-8a49-9666d039d303` then received a successful Dify result
-from workflow `a3664e77-2fa8-4f76-81b5-e735a98fb5b9` in34.126266 seconds.
-Its retained wrapper and creative report pass their schemas; its request digest
-and four-image manifest match the authorized carrier. These checks do not prove
-settlement or materialization. Protected diagnostics `41438098694` still shows
-revision1626, `unknown_outcome`, and that active tester, with44 text / 10 image
-calls and54 steps. Reconcile this existing result; do not repeat the provider
-request. Judge completion and final accounting remain unproven.
-
-The retained app logs identify the report blocker: the first result transaction
-started with2091ms remaining and expired before saving. Its cleanup completed and
-readback reported an uncommitted transaction. Subsequent inspection attempts
-repeatedly exhausted the short observation window during database readback.
-The saved text observation has no provider-evidence issue and includes its settled
-cost snapshot. The local correction gives existing-work reconciliation120 seconds,
-with aligned130-second API and135-second browser bounds. It preserves provider
-deadlines, finalization leases, reservations and the no-replay contract. This
-correction is not yet evidence of live completion.
-
-The protected candidate path also supports completing this retained settled
-report through the normal repository transaction. Its scoped snapshot includes
-decimal cost estimates, current creative records and approved image-replacement
-proofs. It requires fresh original-execution readback, a stable revision, closed
-quiet admission and absent save owners. It preserves the provider deadline,
-counters and old image hold and leaves the run paused. The local replacement
-journey verifies recovery after a report-save failure, repeated verification and
-normal completion of both reports without another provider request for the
-retained tester.
-
-The correction removes duplicate apply snapshots/readbacks and separates its
-durable `report_saved_verification_pending` receipt from the host's existing full
-verification phases. It reserves time for the unchanged finalization lease and
-cleanup before a write. An existing checkpoint remains verification-only. The
-protected phase-two apply `41489333871` still failed: the normal report transaction
-reached its60-second database timeout with19805ms left in the outer command
-window. Inspection `41492426892` found no saved report, materialization or claim.
-Exact abort `41493174826` stopped with `state_changed`; restoration is not proved
-and admission remains closed. The checkpoint and verified backup
-`staging-recovery-issue65-m5-report-phase2-20261102` remain retained.
-This is not M5 completion. Do not replay apply or bypass the snapshot check.
-
-The next correction projects and reuses repeated boolean recovery-eligibility
-reads within one transaction attempt, retaining the exact source predicates and
-all original-byte checks. Live performance remains unproved. Failure diagnostics
-are stored outside the failed transaction and can change its full-row snapshot;
-their effect on this abort must be proved without deleting or ignoring them.
-No additional image is authorized.
-
-The diagnostic abort candidate reconstructs only appended save diagnostics in
-memory and requires the complete original preview digest. Its host helper is
-pinned separately from the interrupted recovery candidate and must have identical
-schema fingerprints. Until this proof and normal prior-app readiness pass live,
-restoration remains unproved. No report or accounting write is part of this path.
-
-Credential inventory impact: no new credential names, storage or transfer paths.
-Existing runtime credentials are used only by their existing consumers; error
-capture removes credential values and signed URL tokens before retention.
+Local verification passed the focused 61 recovery units, complete fake-provider
+Kid journey, both Linux deployment suites, ShellCheck, typecheck, focused lint and
+workflow validation. Two independent source and staging reviews were clean;
+source CI `41498201291`, staging CI `41498541750` and candidate build `41498528418`
+passed. Live acceptance is established by the saved completion above, not these
+local tests. Credential inventory impact: none; credential names, stores,
+transfers and consumers are unchanged. Evidence contains no secret values.
 
 Track private setup, any new reset and campaign permissions only in the
 [readiness/manual-handoff register](EXECUTION.md#b-authorization-register).
@@ -221,8 +134,9 @@ focused checks during corrections, valid-result reuse at local commits, broader
 affected checks and two clean reviews before publication. Paid/live acceptance
 proof is still required; test reuse does not replace it.
 
-M4 completed under its accepted Balanced criterion on 2026-10-27. M5 remains
-planned. This plan update does not start runs, reset data, deploy changes or grant
+M4 completed under its accepted Balanced criterion on 2026-10-27. Real Kid is
+complete as recorded above; the remaining M5 personas require separate grants.
+This plan does not start runs, reset data, deploy changes or grant
 paid execution authority.
 
 The [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27) records all three

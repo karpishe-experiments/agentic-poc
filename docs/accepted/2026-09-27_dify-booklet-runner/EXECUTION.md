@@ -178,20 +178,34 @@ this instance's setting at `false`; restoration instructions in the older
 installation checkpoints below are historical. The
 [Community runbook](../../deployment/dify-community.md#baseline-and-targets)
 owns the current scope. This grants no new paid call, allowance increase,
-automatic retry or successor. The current Kid remains at USD 5 pending its
-separate exact replacement review.
+automatic retry or successor. The latest Kid allowance and completed replacement
+are recorded in the current status below.
 
-**Current M4/M5 status - 2026-10-27:** M4 is complete under the accepted Balanced
-criterion. [The M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27) records the
-three terminal original runs and USD 0.661455 upper-bound exposure in the
-original campaign. Kid and Parent retain failed advisory evaluation; Creator
-retains both current reports. The campaign's stored state remains `active` as an
-accounting fact; this closeout does not mutate it or authorize another call.
-The separate USD 1 Kid experience is complete and outside those totals. M5 Real
-Kid execution later received the separate USD 5 grant recorded below. Any other
-Real run or allowance extension remains unapproved. Follow the
-[accepted M5 A–F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants).
-No M4 report retry, new persona run, reset or manual saved-output repair is needed.
+**Current M4/M5 status - 2026-11-03:** M4 is complete under its accepted
+Balanced criterion; [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27)
+retains its original campaign and failed advisory outcomes. Real Kid
+`6f1c5716-9f27-4714-88fd-989c196b7a04` completed at revision 1642 with an
+approved image replacement, both saved reports, nine current original image
+objects and final accounting. Its accepted total is USD 10; estimated settled
+USD 0.750597 plus reserved USD 4.440489 gives USD 5.191086 exposure. The original
+USD 4.399989 unknown image liability remains reserved; invoice cost is unavailable.
+The [Kid exit record](M5-real.md#real-kid-exit-evidence---2026-11-03) owns exact
+operations, source/publication identities and verification receipts. No further
+call is authorized by that consumed run grant. Parent and Creator Real grants
+remain unapproved; do not advance to them under the Kid allowance.
+
+The user separately requested consolidated documentation, review and publication
+of the completed Kid baseline, followed by a new improvement branch. On that
+branch, review Booklet code and Dify workflows, plan and implement bounded
+efficiency/quality corrections, review and deploy them, then compare a new Kid
+experiment with this baseline. Obtain a separate finite comparison-run allowance
+before any paid comparison call. This request does not authorize automatic
+retries, successors, a budget reset or Parent/Creator execution.
+
+The following dated delivery and grant checkpoints are historical. Their old
+pending states and temporary signature windows do not override current status
+or the current Community signature policy above.
+
 **M5 delivery checkpoint - 2026-10-28:** Staging commit
 `82964797851fb40b85740fa177521e38774ec393` completed through saved request
 `40656308791-1`; protected status `40659139006` and Check deployment
@@ -350,7 +364,7 @@ evidence unless its relevant release/configuration inputs change.
 | Simulated latency and async correction: issue #65 staging runner | [Current M3 evidence](M3-completion.md#automated-diagnostic-candidate): Kid `fd21423e…` completed generation/evaluation without repair, with 47 text calls, 9 images and zero payable calls. Same-operation restart recovery passed after 43.809 seconds. Diagnostics `38132946615` missed the earlier timing gate; retain these measurements | Existing eighteen protected bindings and callback key; encrypted normal settings and probe credentials remain in the existing private Windows profile. No new keys needed | On 2026-10-11 the user made timing targets diagnostic, authorized proceeding to simulated Parent after reviewed deployment/health verification and limited this campaign to three Parent runs. See the [M3 amendment](M3-completion.md#parent-campaign-amendment--2026-10-11). Existing no-reset, no-paid-call, Cloud/production isolation and backup-protected exact-record no-replay boundaries remain | Reuse completed Kid evidence. Check shared fixes and Parent contracts, then run Parent with focused monitoring. Stop after three unsuccessful Parent runs and explain the causes; no fourth run. After success, proceed to Creator and audit retained outputs/reports |
 | Balanced campaign: three persona runs on staging | [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27): original Kid, Parent and Creator complete generation; 75 current artifacts approved, 19 final pages, 202 text requests and zero paid image calls. Kid and Parent have terminal advisory failure; Creator has two reports | Existing Dify-only provider key and callback/binding storage remain unchanged | Original conditional USD 5 grant covered this retained campaign only; no new run or report retry is granted | USD 0.208040 reserved plus USD 0.453415 settled upper-bound charges; USD 4.338545 remains under that campaign ceiling. No active or unresolved run ownership. Stored campaign state remains `active`; no state mutation is required for closeout |
 | Automated host/run diagnostics and sandbox memory: existing shared VPS | Endpoint/workflow deployed. Sandbox verified at 1024 MiB. Scheduler repair `38139804937` passed; diagnostics `38141274006` verified 1536 MiB, zero restarts/OOM counters and authenticated public API HTTP 200. Kid completed without repair; earlier timing targets were missed. [M3 evidence](M3-completion.md#parent-attempt-2-and-authorization-coordination--2026-10-11) | Existing protected deployment SSH/Cloudflare access and staging Basic gate; no new keys or local credential copy | User authorized automated diagnostics and selective memory increase in this session. Preserve other limits, data, Cloud and production; require idle work and live capacity guard | Parent attempt 1 reconciled with verified backup; attempt 2 passed J12 but failed at J13 authorization. Finish reviewed authorization coordination and deploy before the final allowed Parent attempt. Timing is diagnostic. No routine root-terminal handoff is needed |
-| Real campaign: ordered 3/5/8-page staging runs, each plus cover | M4 complete; [M5 A-F sequence](M5-real.md#accepted-m5-implementation-sequence---pending-delivery-and-paid-grants) and image-provider readiness pending | Text/image provider credentials inside Dify; approved model/binding references | Not granted. Request separate finite Kid, Parent and Creator allowances after readiness and preceding accepted evidence | Verify selected Sunburst provider support, real references, image pre-call accounting, reports and original bytes before paid acceptance |
+| Real campaign: ordered 3/5/8-page staging runs, each plus cover | [Real Kid completed with an approved replacement](M5-real.md#real-kid-exit-evidence---2026-11-03); Parent and Creator pending | Existing Dify provider credentials, reviewed publications and dev7/dev3 packages | Retained Kid USD 10 grant covers only that run; no new call follows from completion. Parent, Creator and the requested Kid comparison each need a separate finite grant | Preserve original unknown liability, approvals, nine current image objects, both reports and final accounting; review improvements after baseline publication |
 | Probe cleanup: explicitly listed disposable IDs only | Retained probes documented in [M0](M0-readiness.md) | Existing Community control profile | Not granted; retaining probes is acceptable; no prefix-wide deletion | Cleanup only; verify exact IDs and confirmation before removal |
 
 The bounded-operation candidate is deployed at staging `5374ec4` on 2026-10-12.
@@ -360,7 +374,7 @@ Parent item/job. Original request `38149230374-1` is archived unchanged; deploym
 
 | Remaining dependency | Technical verification | Private reference | Required action | Exit |
 | --- | --- | --- | --- | --- |
-| M3 exit / M4 readiness | M3 Simulated acceptance complete; [M4 Balanced exit](M4-balanced.md#m4-exit-evidence---2026-10-27) complete under its accepted criterion | Existing protected access and eighteen bindings; no new credential setup is authorized | Reuse completed evidence; no reset or new spending allowance follows from M4 closeout | M5 implementation and separately authorized Real acceptance remain pending |
+| M3 exit / M4 readiness | M3 Simulated acceptance complete; [M4 Balanced exit](M4-balanced.md#m4-exit-evidence---2026-10-27) complete under its accepted criterion | Existing protected access and eighteen bindings; no new credential setup is authorized | Reuse completed evidence; no reset or new spending allowance follows from M4 closeout | Real Kid is complete; remaining personas and a new paid comparison require their separate finite grants |
 
 Preserve all saved data and failed-run evidence. Do not repeat completed private
 setup, bootstrap or deployment. No paid execution, reset, production or Cloud
