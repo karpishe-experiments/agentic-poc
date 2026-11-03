@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  files: new Map<string, string>(), events: [] as string[], execution: false,
+  files: new Map<string, string>(), events: [] as string[], execution: false, settledReport: false,
   mutationError: undefined as Error | undefined,
   budgetError: undefined as Error | undefined,
   entryErrors: {} as Partial<Record<"environment" | "database" | "configuration" | "recovery_service" | "admission", Error>>,
@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/db/client", () => ({ getDatabase: () => {
   if (mocks.entryErrors.database) throw mocks.entryErrors.database;
-  return { close: mocks.close, collections: { experiment_operations: { findOne: async () => ({ providerKind: "text" }) },
+  return { close: mocks.close, collections: { experiment_operations: { findOne: async () => ({ providerKind: "text",
+    ...(mocks.settledReport ? { role: "tester", m4Observation: { remoteStatus: "succeeded" }, realReportPreparation: {} } : {}) }) },
     experiment_runs: { findOne: async () => ({ execution: mocks.execution ? {} : undefined }) }, deployment_control: { findOne: async () => {
     if (mocks.entryErrors.admission) throw mocks.entryErrors.admission;
     return { maintenance: false };
@@ -44,6 +45,12 @@ vi.mock("@/lib/operations/execution-text-recovery", () => ({
     verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
     previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim })),
 }));
+vi.mock("@/lib/operations/settled-report-recovery", () => ({
+  createSettledReportRecovery: vi.fn(() => ({ preview: mocks.preview, apply: mocks.apply,
+    deferCompletedVerification: true,
+    verifyCompleted: mocks.verify, verifyUnapplied: mocks.verifyUnapplied,
+    previewClaimRelease: mocks.previewClaim, applyClaimRelease: mocks.applyClaim, verifyClaimRelease: mocks.verifyClaim })),
+}));
 vi.mock("@/lib/operations/booklet-recovery", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/operations/booklet-recovery")>();
   return { ...actual,
@@ -73,6 +80,7 @@ function argumentsFor(phase: string) {
 }
 beforeEach(() => {
   mocks.execution = false;
+  mocks.settledReport = false;
   vi.resetModules(); vi.clearAllMocks(); mocks.files.clear(); mocks.events.length = 0; mocks.mutationError = undefined; process.exitCode = 0;
   mocks.entryErrors = {};
   mocks.preview.mockResolvedValue({ contract: "booklet-recovery-v1", previewDigest: digest, snapshot: { rows: {} } });
@@ -98,6 +106,57 @@ beforeEach(() => {
 });
 afterEach(() => { process.argv = originalArgv; process.exitCode = 0; vi.restoreAllMocks(); });
 describe("supported booklet recovery command", () => {
+  it("limits diagnostic-only abort verification to the settled report service without checkpoint writes", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    const recoveryModule = await import("@/lib/operations/settled-report-recovery");
+    const create = vi.mocked(recoveryModule.createSettledReportRecovery);
+    const original = create.getMockImplementation()!;
+    const verifyDiagnosticUnapplied = vi.fn().mockResolvedValue({ verified: true, outcome: "unapplied",
+      proof: "diagnostic_append_only", providerPosts: 0 });
+    create.mockImplementation((...args) => ({ ...original(...args), verifyDiagnosticUnapplied }));
+    argumentsFor("verify-diagnostic-unapplied"); await import("@/scripts/booklet-recovery");
+    expect(verifyDiagnosticUnapplied).toHaveBeenCalledExactlyOnceWith({ runId: "run", operationId: "operation", expectedRevision: 2 }, digest);
+    expect(mocks.apply).not.toHaveBeenCalled(); expect(mocks.files.size).toBe(0);
+  });
+  it("checkpoints a saved report as verification pending and verifies it in the separate host phase", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    argumentsFor("apply"); await import("@/scripts/booklet-recovery");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).not.toHaveBeenCalled();
+    const path = "/recovery/application-recovery.json";
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("verification_pending");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toMatchObject({
+      outcome: "report_saved_verification_pending", providerPosts: 0 });
+    mocks.verify.mockRejectedValueOnce(new Error("image bytes changed"));
+    argumentsFor("verify-completed"); vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(process.exitCode).toBe(1);
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("verification_pending");
+    expect(mocks.apply).toHaveBeenCalledOnce();
+    process.exitCode = 0; vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(process.exitCode).toBe(0);
+    expect(JSON.parse(mocks.files.get(path)!).phase).toBe("completed");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledTimes(2);
+  });
+  it("verifies a lost report apply receipt without repeating materialization", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    argumentsFor("apply"); await import("@/scripts/booklet-recovery");
+    vi.resetModules(); await import("@/scripts/booklet-recovery");
+    expect(mocks.apply).toHaveBeenCalledOnce(); expect(mocks.verify).toHaveBeenCalledOnce();
+    expect(JSON.parse(mocks.files.get("/recovery/application-recovery.json")!).phase).toBe("completed");
+    expect(JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])).toMatchObject({ repeated: true });
+  });
+  it("routes a successful retained Real report through protected completion", async () => {
+    mocks.execution = true; mocks.settledReport = true;
+    argumentsFor("preview");
+    await import("@/scripts/booklet-recovery");
+    const { createSettledReportRecovery } = await import("@/lib/operations/settled-report-recovery");
+    const { createExecutionTextFailureRecovery } = await import("@/lib/operations/execution-text-recovery");
+    expect(createSettledReportRecovery).toHaveBeenCalledOnce();
+    expect(createExecutionTextFailureRecovery).not.toHaveBeenCalled();
+    expect(mocks.preview).toHaveBeenCalledWith({ runId: "run", operationId: "operation", expectedRevision: 2 }, false);
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.files.size).toBe(0);
+    expect(process.exitCode).toBe(0);
+  });
   it("routes saved execution targets through the same preview checkpoint interface", async () => {
     mocks.execution = true;
     argumentsFor("preview");

@@ -437,8 +437,13 @@ Authorization, text and image ownership cleanup use the independent five-second
 cleanup budget and exact claim identity, including lost claim acknowledgements.
 Image cleanup covers every post-claim exit and preserves original bytes/digest.
 Sanitized failure diagnostics retain the original stage, error kind, repository
-code, timing, remaining budget and cleanup outcome. Interactive Inspect/Stop keep
-their existing 20/30-second budgets. Exact granted maintenance completion recovery reuses
+code, timing, remaining budget and cleanup outcome. Inspect/Stop use a bounded
+120-second reconciliation window inside a 130-second request budget; their browser
+observer waits up to 135 seconds. This permits database verification and saved-result
+materialization after a provider deadline expires. It does not renew that deadline,
+change the 60-second finalization lease, enlarge individual transport bounds, or
+authorize a provider POST. Parent request budgets still constrain nested work.
+Exact granted maintenance completion recovery reuses
 its same-invocation authenticated GET after full post-observation preservation
 proof and fresh eligibility/admission checks. Its internal dispatcher entry checks
 the bounded context, grant, revision, operation and response identity before using
@@ -780,6 +785,41 @@ original saved publication, fingerprints target metadata and reservations, and
 uses the shared closure transaction with accounting verification before commit.
 The existing private checkpoint owns interruption reconciliation. Legacy M4
 recovery and host orchestration retain their existing interpretation.
+
+The same entrypoint supports `settled-report-completion-v1` for a terminal,
+successful Real tester or judge whose usage has settled but whose report save
+failed. Preview verifies the original Dify wrapper with GET, the saved operation
+configuration, source-record snapshots and a stable target revision. Apply requires
+closed quiet admission, an expired provider deadline and no completion owner.
+It validates current sources and original bytes through the normal
+report-completion repository transaction and leaves the run
+paused. It cannot dispatch provider work. Snapshot proofs include decimal cost
+estimates without changing historical M4 wire hashes. Verification preserves
+other operations, approved replacement liabilities, creative records and counters.
+Repeated completion verification reads current reference and final bytes again;
+the existing private checkpoint resolves interrupted acknowledgements.
+Report apply returns `report_saved_verification_pending` after the normal save
+and a durable `verification_pending` checkpoint. The host's existing separate
+`verify-completed` phase must pass before completion or a deployment handoff.
+Prior checkpoints remain verification-only; they never trigger another apply.
+Apply reuses its stable preview within the same closed-admission invocation,
+rechecks ownership and admission, and requires time for the unchanged 60-second
+finalization lease plus cleanup before starting the write. Historical recovery
+phases keep their existing checkpoint and verification behavior.
+
+Style, sheet and final-page source verification project only operation identity
+for boolean recovery-eligibility probes. The exact predicates remain separate;
+one verification attempt reuses each result and stops probing alternatives after
+a match. A new transaction attempt reads again. This cache grants no assembly,
+approval or provider-dispatch authority and does not replace original-byte checks.
+
+The settled-report verifier also supports a read-only diagnostic append proof
+for aborting an unapplied recovery. It tests candidate error prefixes in memory
+against the entire original preview digest. Only appended Booklet report-save
+diagnostics for the same attempt are eligible; current stored errors remain
+unchanged. A separately pinned verifier image can supply this proof to the
+canonical dispatcher's existing abort path after exact schema compatibility.
+It cannot accept other record changes, resolve a charge or complete a report.
 
 The same protected entrypoint supports one exact retained Real tester report
 that failed at the dev6 parameter guard before client construction. Its reviewed

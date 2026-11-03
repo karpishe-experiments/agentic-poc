@@ -10,19 +10,20 @@ import { withOperationBudget, operationBudgetRemainingMs } from "@/lib/operation
 import { inspectRecoveryWork } from "@/lib/operations/recovery-inspection";
 import { createExecutionTextFailureRecovery } from "@/lib/operations/execution-text-recovery";
 import { createImageReplacementParkingRecovery } from "@/lib/operations/image-replacement-parking";
+import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
 import { BOOKLET_RECOVERY_CONTRACT, BookletRecoveryError, createBookletRecovery, recoveryDigest, inspectStep,
   type RecoverySnapshot } from "@/lib/operations/booklet-recovery";
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const inputSchema = z.strictObject({
-  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "inspect-blockers", "verify-prior-compatible",
+  phase: z.enum(["capabilities", "preview", "verify-closed", "apply", "verify-completed", "verify-unapplied", "verify-diagnostic-unapplied", "inspect-blockers", "verify-prior-compatible",
     "preview-claim-release", "apply-claim-release", "verify-claim-release"]),
   "run-id": id.optional(), "operation-id": id.optional(), "expected-revision": z.coerce.number().int().nonnegative().optional(),
   "evidence-dir": z.literal("/recovery").optional(), "preview-digest": sha.optional(),
   page: z.coerce.number().int().min(0).max(10000).optional(), limit: z.coerce.number().int().min(1).max(50).optional(),
 });
-const checkpointSchema = z.strictObject({ contract: z.literal(BOOKLET_RECOVERY_CONTRACT), phase: z.enum(["started", "completed"]),
+const checkpointSchema = z.strictObject({ contract: z.literal(BOOKLET_RECOVERY_CONTRACT), phase: z.enum(["started", "verification_pending", "completed"]),
   target: z.strictObject({ runId: id, operationId: id, expectedRevision: z.number().int().nonnegative() }),
   previewDigest: sha, snapshotDigest: sha, snapshot: z.custom<RecoverySnapshot>(value => !!value && typeof value === "object"),
 });
@@ -48,7 +49,7 @@ async function main() {
   const input = inputSchema.parse(args); phase = input.phase;
   if (input.phase === "capabilities") {
     emit({ contract: BOOKLET_RECOVERY_CONTRACT, environment: "_staging", schemaVersion: "1", ...dataContract,
-      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "image-replacement-parking", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
+      supported: ["granted-j11-completion", "granted-j12-manager-completion", "granted-legacy-count-failure", "granted-decision-rejection", "execution-text-failure-closure", "image-replacement-parking", "settled-report-completion", "diagnostic-append-unapplied", "inspect-blockers", "verify-prior-compatible", "expired-finalization-claim-release"], providerPosts: 0 }); return;
   }
   const env = await inspectStep("environment", async () => getServerEnv());
   if (env.RUNNER_ENABLED !== "false" || env.DEPLOYMENT_ENV !== "_staging" || env.MONGODB_DATABASE !== "kids_booklet" ||
@@ -69,8 +70,12 @@ async function main() {
   if (!profile.enabled) throw new BookletRecoveryError("configuration_invalid");
   const service = await inspectStep("recovery_service", async () => {
     const run = await database!.collections.experiment_runs.findOne({ _id: target.runId }, { projection: { execution: 1 } });
-    const operation = await database!.collections.experiment_operations.findOne({ _id: target.operationId, runId: target.runId }, { projection: { providerKind: 1 } });
+    const operation = await database!.collections.experiment_operations.findOne({ _id: target.operationId, runId: target.runId },
+      { projection: { providerKind: 1, role: 1, "m4Observation.remoteStatus": 1, realReportPreparation: 1 } });
     if (run?.execution && operation?.providerKind === "image") return createImageReplacementParkingRecovery({ database: database!, config: profile.config });
+    if (run?.execution && operation?.providerKind === "text" && ["tester", "judge"].includes(operation.role) &&
+        operation.m4Observation?.remoteStatus === "succeeded" && operation.realReportPreparation)
+      return createSettledReportRecovery({ database: database!, config: profile.config });
     return run?.execution ? createExecutionTextFailureRecovery({ database: database!, config: profile.config })
       : createBookletRecovery({ database: database!, config: profile.config });
   });
@@ -114,6 +119,10 @@ async function main() {
     if (!input["preview-digest"]) throw new BookletRecoveryError("preview_required");
     emit({ ...await service.verifyUnapplied(target, input["preview-digest"]), phase }); return;
   }
+  if (input.phase === "verify-diagnostic-unapplied") {
+    if (!input["preview-digest"] || !("verifyDiagnosticUnapplied" in service)) throw new BookletRecoveryError("diagnostic_abort_unsupported");
+    emit({ ...await service.verifyDiagnosticUnapplied(target, input["preview-digest"]), phase }); return;
+  }
   if (input.phase === "preview" || input.phase === "verify-closed") {
     // A supported pre-write abort restores the prior app with admission closed.
     // A new preview may inspect that state without reopening paid execution.
@@ -135,7 +144,10 @@ async function main() {
       recoveryDigest(prior.snapshot) !== prior.snapshotDigest) throw new BookletRecoveryError("checkpoint_mismatch");
     // Includes a process lost after commit: inspect proof, never replay the mutation.
     const result = await service.verifyCompleted(target, prior.snapshot);
-    if (prior.phase !== "completed" && input.phase === "apply") await saveCheckpoint(checkpointPath, { ...prior, phase: "completed" }, false);
+    if (prior.phase !== "completed" && (input.phase === "apply" ||
+        prior.phase === "verification_pending" && input.phase === "verify-completed")) {
+      await saveCheckpoint(checkpointPath, { ...prior, phase: "completed" }, false);
+    }
     emit({ ...result, phase, repeated: true }); return;
   }
   if (input.phase !== "apply") throw new BookletRecoveryError("checkpoint_missing");
@@ -144,6 +156,15 @@ async function main() {
       snapshotDigest: recoveryDigest(proof.snapshot), snapshot: proof.snapshot };
     await saveCheckpoint(checkpointPath, checkpoint, true);
   });
+  if ("deferCompletedVerification" in service && service.deferCompletedVerification === true) {
+    // Normal report completion committed. Full current-byte/accounting proof is
+    // a separate existing host phase with its own bounded I/O window. This
+    // receipt cannot establish host completion or a deployment handoff.
+    await saveCheckpoint(checkpointPath, { contract: BOOKLET_RECOVERY_CONTRACT, phase: "verification_pending", target,
+      previewDigest: preview.previewDigest, snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot }, false);
+    emit({ verified: true, phase, outcome: "report_saved_verification_pending", admission: "closed", providerPosts: 0,
+      runId: target.runId, operationId: target.operationId, repeated: false }); return;
+  }
   const result = await service.verifyCompleted(target, preview.snapshot);
   await saveCheckpoint(checkpointPath, { contract: BOOKLET_RECOVERY_CONTRACT, phase: "completed", target, previewDigest: preview.previewDigest,
     snapshotDigest: recoveryDigest(preview.snapshot), snapshot: preview.snapshot }, false);

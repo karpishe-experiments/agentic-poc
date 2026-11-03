@@ -17,6 +17,7 @@ SECRET_NAME=''
 RUN_ID=''
 OPERATION_ID='' EXPECTED_REVISION='' PREVIEW_DIGEST='' ORIGINAL_REQUEST_ID=''
 BACKUP_HELPER_IMAGE='' BACKUP_HELPER_COMMIT='' BACKUP_SUBJECT_IMAGE=''
+ABORT_PROOF_IMAGE='' ABORT_PROOF_COMMIT=''
 BACKUP_HELPER_RELEASE='' MAINTENANCE_DETACHED=false
 ABORT_RECOVERY=false RELEASE_EXPIRED_CLAIM=false
 RECOVERY_ORIGINAL_EVIDENCE=''
@@ -70,6 +71,7 @@ Options:
                                    required exact retained/completed ID for operation-status/operation-stop
   --release-expired-claim           linked recovery for an exact retained expired claim
   --abort-recovery                  apply: close and archive an unstarted repair
+  --abort-proof-image IMAGE --abort-proof-commit SHA  optional pinned diagnostic-only abort verifier
   --inspection-only --page N --limit N  read-only paginated candidate inspection
   --operation-id UUID --expected-revision N  exact candidate recovery target
   --preview-digest SHA256            required recovery apply preview identity
@@ -100,7 +102,7 @@ parse_arguments() {
       --inspection-only) INSPECTION_ONLY=true; shift ;;
       --abort-recovery) ABORT_RECOVERY=true; shift ;;
       --release-expired-claim) RELEASE_EXPIRED_CLAIM=true; shift ;;
-      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--backup-helper-image|--backup-helper-commit|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
+      --action|--config|--environment|--image-digest|--backup-id|--confirmation|--vps-host|--vps-user|--commit|--request-id|--run-id|--operation-id|--expected-revision|--preview-digest|--original-request-id|--backup-helper-image|--backup-helper-commit|--abort-proof-image|--abort-proof-commit|--page|--limit|--secret-name|--zone|--staging-hostname|--prod-hostname|--deploy-hostname|--write-config)
         name="$1"; [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || die "$1 requires a value"
         value="$2"
         [[ -z "${SEEN[$name]+x}" || "${SEEN[$name]}" == "$value" ]] || die "Conflicting duplicate argument: $name"
@@ -115,6 +117,7 @@ parse_arguments() {
           --operation-id) OPERATION_ID="$value";; --expected-revision) EXPECTED_REVISION="$value";;
           --preview-digest) PREVIEW_DIGEST="$value";; --original-request-id) ORIGINAL_REQUEST_ID="$value";;
           --backup-helper-image) BACKUP_HELPER_IMAGE="$value";; --backup-helper-commit) BACKUP_HELPER_COMMIT="$value";;
+          --abort-proof-image) ABORT_PROOF_IMAGE="$value";; --abort-proof-commit) ABORT_PROOF_COMMIT="$value";;
           --zone) ZONE_NAME="$value";; --staging-hostname) STAGING_HOSTNAME="$value";; --prod-hostname) PROD_HOSTNAME="$value";;
           --deploy-hostname) DEPLOY_HOSTNAME="$value";; --write-config) CONFIG_OUTPUT="$value";;
         esac
@@ -143,6 +146,11 @@ validate_arguments() {
   [[ -z "$IMAGE_DIGEST" || "$IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]] || die 'Invalid immutable GHCR digest'
   if [[ -n "$BACKUP_HELPER_IMAGE$BACKUP_HELPER_COMMIT" ]]; then
     [[ "$ACTION" == expired-deployment-recover && "$ENVIRONMENT" == staging && "$BACKUP_HELPER_IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ && "$BACKUP_HELPER_COMMIT" =~ ^[a-f0-9]{40}$ && -z "$BACKUP_ID" ]] || die 'Backup helper requires expired staging recovery, pinned image/commit and server-resolved backup ID'
+  fi
+  if [[ -n "$ABORT_PROOF_IMAGE$ABORT_PROOF_COMMIT" ]]; then
+    [[ "$ACTION" == candidate-reconcile && "$ENVIRONMENT" == staging && "$ABORT_RECOVERY" == true && "$APPLY" == true &&
+      "$ABORT_PROOF_IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ && "$ABORT_PROOF_COMMIT" =~ ^[a-f0-9]{40}$ &&
+      -z "$BACKUP_HELPER_IMAGE$BACKUP_HELPER_COMMIT$ORIGINAL_REQUEST_ID" && "$RELEASE_EXPIRED_CLAIM" == false && "$INSPECTION_ONLY" == false ]] || die 'Abort proof helper requires exact staging recovery abort and pinned image/commit'
   fi
   [[ -z "$SECRET_NAME" || "$SECRET_NAME" =~ ^(OPENAI_API_KEY|MONGODB_URI|ACCESS_GATE_PASSWORD|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DIFY_API_KEY|DIFY_TOOL_KEY|DIFY_IMAGE_OPENAI_API_KEY|DIFY_COMMUNITY_WORKFLOW_API_KEY|DIFY_COMMUNITY_CALLBACK_KEY|DIFY_COMMUNITY_PROBE|DIFY_BOOKLET_RUNNER)$ ]] || die 'Invalid application secret name'
   [[ -z "$SECRET_NAME" || "$ACTION" =~ ^(repair-first-activation-secrets|rotate-secrets|rotate-protected-dify-key|stage-secrets)$ ]] || die '--secret-name is only valid for application secret repair or rotation'
@@ -258,6 +266,7 @@ host_call() {
   [[ -z "$PREVIEW_DIGEST" ]] || remote+=(--preview-digest "$PREVIEW_DIGEST")
   [[ -z "$ORIGINAL_REQUEST_ID" ]] || remote+=(--original-request-id "$ORIGINAL_REQUEST_ID")
   [[ -z "$BACKUP_HELPER_IMAGE" ]] || remote+=(--backup-helper-image "$BACKUP_HELPER_IMAGE" --backup-helper-commit "$BACKUP_HELPER_COMMIT")
+  [[ -z "$ABORT_PROOF_IMAGE" ]] || remote+=(--abort-proof-image "$ABORT_PROOF_IMAGE" --abort-proof-commit "$ABORT_PROOF_COMMIT")
   [[ "$ABORT_RECOVERY" == false ]] || remote+=(--abort-recovery)
   [[ "$RELEASE_EXPIRED_CLAIM" == false ]] || remote+=(--release-expired-claim)
   if [[ "$INSPECTION_ONLY" == true ]]; then remote+=(--inspection-only --page "$RECOVERY_PAGE" --limit "$RECOVERY_LIMIT"); fi
@@ -826,7 +835,7 @@ recovery_normalize_response() {
         (["event","timestamp","runId","phase","elapsedMs","outcome","budgetAtStartMs","remainingBudgetMs","queryCount","storageCallCount","transactionAttempts"]-keys|length)==0 and
         .runId==$run and ((has("operationId")|not) or .operationId==$operation) and .outcome=="succeeded" and
         (.timestamp|type=="string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")) and
-        (.phase|IN("accounting_campaign_read","accounting_campaign_operations_read","accounting_failed_proofs_read","accounting_failure_sources_read","accounting_run_operations_read","accounting_operation_validation","generation_accounting","evaluation_operations_read","source_verification")) and
+        (.phase|IN("accounting_campaign_read","accounting_campaign_operations_read","accounting_failed_proofs_read","accounting_failure_sources_read","accounting_run_operations_read","accounting_operation_validation","generation_accounting","evaluation_operations_read","source_verification","result_transaction")) and
         (.elapsedMs|count) and (.budgetAtStartMs|duration) and (.remainingBudgetMs|duration) and
         (.queryCount|count) and (.storageCallCount|count) and (.transactionAttempts|count) and
         ((has("readRows")|not) or (.readRows|count)) and ((has("readJsonBytes")|not) or (.readJsonBytes|duration))
@@ -1208,6 +1217,12 @@ supported_recovery_host() (
       local abort_phase interrupted_phase
       abort_phase="$(jq -er .phase "$journal")"; interrupted_phase="$(jq -r '.interruptedPhase // ""' "$journal")"
       [[ "$abort_phase" =~ ^(prepared|closing|stopping|backup|reconciling|aborting-closed)$ ]] || die 'Recovery phase cannot be aborted'
+      if [[ -n "$ABORT_PROOF_IMAGE" ]]; then
+        [[ "$abort_phase" == reconciling || ( "$abort_phase" == aborting-closed && "$interrupted_phase" == reconciling ) ]] || die 'Diagnostic abort proof requires interrupted reconciliation'
+      fi
+      if jq -e 'has("abortProofImage") or has("abortProofCommit")' "$journal" >/dev/null; then
+        [[ "$ABORT_PROOF_IMAGE" == "$(jq -er .abortProofImage "$journal")" && "$ABORT_PROOF_COMMIT" == "$(jq -er .abortProofCommit "$journal")" ]] || die 'Recorded abort proof candidate changed'
+      fi
       if [[ "$abort_phase" == reconciling || ( "$abort_phase" == aborting-closed && "$interrupted_phase" == reconciling ) ]]; then
         # A started checkpoint is evidence of intent, not proof of a write.
         # Only unchanged business state and the original grant permit abort.
@@ -1218,8 +1233,27 @@ supported_recovery_host() (
         source_tree="$(jq -er .sourceTree "$journal")"
         [[ "$source_tree" =~ ^[a-f0-9]{40}$ && "$(docker image inspect --format '{{index .Config.Labels "uk.co.uniwares.booklet.source-tree"}}' "$IMAGE_DIGEST")" == "$source_tree" ]] || die 'Abort candidate source tree differs'
         app_digest="$(jq -er .appPreviewDigest "$journal")"
-        recovery_app_json "$candidate" '' verify-unapplied "$evidence/abort-unapplied.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest"
+        local abort_proof_phase=verify-unapplied
+        if [[ -n "$ABORT_PROOF_IMAGE" ]]; then
+          [[ "$ABORT_PROOF_IMAGE" == "$(jq -er .image "$CONFIG_FILE")"@sha256:* ]] || die 'Abort proof repository differs'
+          mkdir -p "$TEMP_DIR/docker"
+          DOCKER_CONFIG="$TEMP_DIR/docker" control_timeout 300 docker pull "$ABORT_PROOF_IMAGE" >/dev/null
+          [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$ABORT_PROOF_IMAGE")" == "$ABORT_PROOF_COMMIT" ]] || die 'Abort proof revision differs'
+          local original_schema proof_schema
+          original_schema="$(recovery_schema_digest "$IMAGE_DIGEST")" || die 'Original abort schema inspection failed'
+          proof_schema="$(recovery_schema_digest "$ABORT_PROOF_IMAGE")" || die 'Abort proof schema inspection failed'
+          [[ "$original_schema" =~ ^[a-f0-9]{64}$ && "$original_schema" == "$proof_schema" ]] || die 'Abort proof schema differs'
+          jq -n --arg image "$ABORT_PROOF_IMAGE" '{services:{app:{image:$image}}}' > "$candidate/image.json"
+          recovery_oneoff "$candidate" '' capabilities > "$TEMP_DIR/abort-capabilities.json" 2> "$TEMP_DIR/abort-capabilities.stderr"
+          jq -e '.contract=="booklet-recovery-v1" and .environment=="_staging" and .initializationRequired==false and (.supported|index("diagnostic-append-unapplied"))!=null' "$TEMP_DIR/abort-capabilities.json" >/dev/null || die 'Diagnostic abort proof capability missing'
+          abort_proof_phase=verify-diagnostic-unapplied
+        fi
+        recovery_app_json "$candidate" '' "$abort_proof_phase" "$evidence/abort-unapplied.json" --run-id "$RUN_ID" --operation-id "$OPERATION_ID" --expected-revision "$EXPECTED_REVISION" --preview-digest "$app_digest"
         jq -e '.verified==true and .outcome=="unapplied" and .providerPosts==0' "$evidence/abort-unapplied.json" >/dev/null || die 'Unapplied recovery proof is missing'
+        if [[ -n "$ABORT_PROOF_IMAGE" ]]; then
+          jq -e '.proof=="diagnostic_append_only"' "$evidence/abort-unapplied.json" >/dev/null || die 'Diagnostic append proof is missing'
+          jq --arg image "$ABORT_PROOF_IMAGE" --arg commit "$ABORT_PROOF_COMMIT" '.abortProofImage=$image | .abortProofCommit=$commit' "$journal" > "$journal.next"; mv "$journal.next" "$journal"
+        fi
       else
         [[ ! -e "$evidence/application-recovery.json" ]] || die 'Unexpected application checkpoint; abort is forbidden'
       fi

@@ -13,7 +13,7 @@ import { parseReferenceProposal } from "@/lib/contracts/experiment-references";
 import { assembleReferenceSheet } from "@/lib/experiment-runner/reference-assembly";
 import type { AssetStore } from "@/lib/assets/asset-store";
 import type { VerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
-import { verificationMetadata, type VerificationMetadata } from "@/db/experiment-verification-metadata";
+import { verificationMetadata, verificationOperationExists, type VerificationMetadata } from "@/db/experiment-verification-metadata";
 
 const inputSchema = z.strictObject({ runId: opaqueIdSchema, draftSheetVersionId: opaqueIdSchema, imageOperationId: opaqueIdSchema });
 const metadataSchema = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().positive(),
@@ -34,15 +34,15 @@ function json(raw: string | null | undefined): unknown {
 export function createExperimentSheetAssembly(input: { database: Database; store: AssetStore; now?: () => number }) {
   const { database, store } = input;
   const now = input.now ?? Date.now;
-  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata) {
+  async function load(value: z.infer<typeof inputSchema>, session: ClientSession, verificationOnly = false, metadata?: VerificationMetadata, attempt?: VerificationAttempt) {
     const options = { session };
     const run = metadata?.run ?? await database.collections.experiment_runs.findOne({ _id: value.runId }, options);
     if (!run) throw new ExperimentRepositoryError("not_found", "Sheet run was not found.");
     const recoveredApproval = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
-        role: "tester", mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, options) : null;
-    const recoveredPagination = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: run.activeOperationId, runId: run._id,
+      ? await verificationOperationExists(database, session, { _id: run.activeOperationId, runId: run._id,
+        role: "tester", mode: run.mode, state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1 }, attempt) : false;
+    const recoveredPagination = !recoveredApproval && verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && run.activeOperationId
+      ? await verificationOperationExists(database, session, { _id: run.activeOperationId, runId: run._id,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1,
         mode: run.mode, providerKind: "text", dispatchStartedAtMs: { $ne: null }, workflowRunId: { $ne: null },
         // A late authenticated callback may precede terminal publication GET.
@@ -50,15 +50,15 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         $or: [{ role: "specialist", taskId: "J11", subjectKind: "book", subjectId: run.bookletId },
           { role: "specialist", taskId: "J12", subjectKind: "page", providerKind: "text" },
           { role: "judge", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" },
-          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, options) : null;
+          { role: "manager", taskId: null, subjectKind: "book", subjectId: run.bookletId, providerKind: "text" }] }, attempt) : false;
     // Read original approved references for a late callback from the exact
     // claimed J13 operation. This does not authorize assembly or a new dispatch.
     const imageOperationId = run.activeOperationId ?? run.imageReplacementParking?.operationId;
-    const recoveredImage = verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
-      ? await database.collections.experiment_operations.findOne({ _id: imageOperationId, runId: run._id,
+    const recoveredImage = !recoveredApproval && !recoveredPagination && verificationOnly && run.status === "blocked" && run.safeFailure === "unknown_outcome" && imageOperationId
+      ? await verificationOperationExists(database, session, { _id: imageOperationId, runId: run._id,
         role: "image", taskId: "J13", subjectKind: "page", providerKind: "image", mode: run.mode,
         state: "unknown", safeFailure: "unknown_outcome", reservationCount: 1, workflowRunId: { $ne: null },
-        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, options) : null;
+        parentWorkflowRunId: { $ne: null }, imageRequestJson: { $ne: null } }, attempt) : false;
     // A replacement preview reads approved sheets while its unclaimed image
     // failure remains blocked. This exception never permits assembly writes.
     const failedImage = verificationOnly && run.status === "blocked" && run.safeFailure === "definite_failure" && !run.activeOperationId
@@ -153,7 +153,7 @@ export function createExperimentSheetAssembly(input: { database: Database; store
         !version.sourceVersionId || (artifact.taskId !== "J09" && artifact.taskId !== "J10")) invalid("Sheet approval requires the current assembled version.");
     const content = parseReferenceProposal(artifact.taskId, "assembled", json(version.contentJson)).content;
     if (!("build" in content)) invalid("Sheet assembly has no image evidence.");
-    const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true, metadata);
+    const checked = await load({ runId, draftSheetVersionId: version.sourceVersionId, imageOperationId: content.build.operationId }, session, true, metadata, verification?.attempt);
     if (checked.current._id !== versionId) conflict("Sheet approval target changed.");
     if (verification?.verifyBytes !== false) await verifyBytes(checked.bytes, verification?.attempt);
   }
