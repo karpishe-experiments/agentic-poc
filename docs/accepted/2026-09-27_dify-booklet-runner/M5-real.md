@@ -67,8 +67,11 @@ includes long approval/recovery pauses and is not a provider performance measure
 
 Both reports found a coherent, reassuring rescue with recognizable characters
 and setting. All finals are 1024x1024 rather than the approved 1800x2700 portrait
-canvas. Tester also found missing planned cover narration/dialogue. These are
-retained quality findings, not permission for more images. The trace displays
+canvas. Tester also reported missing cover narration/dialogue. The subsequent code
+review confirmed that current J12 cover lettering deliberately contains only the
+title; this reported omission is not established as a generator defect. Preserve
+the report as observed, and assess required visible text against approved J12
+lettering. These findings do not grant permission for more images. The trace displays
 `Attempt: failed` for the late recovered reports while their authoritative
 operation states are `succeeded`; diagnostics confirms both saved results and
 materializations. Keep this presentation inconsistency for the improvement review.

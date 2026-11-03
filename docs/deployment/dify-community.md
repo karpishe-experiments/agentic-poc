@@ -17,7 +17,7 @@ This supersedes the earlier temporary-window restoration requirement here.
 The private-root receipt verified both the protected runtime file and the
 running plugin daemon at `false`. Exact MCP readback subsequently verified
 the reviewed text dev7 and image dev3 packages recorded in
-[M5](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#reusable-approvals-and-diagnostics-implementation-checkpoint--2026-11-01).
+[M5](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#reusable-approvals-and-diagnostics-implementation-checkpoint---2026-11-03).
 Keep package review, exact identity verification and paid-execution authority
 separate. This choice does not authorize arbitrary packages, provider retries,
 additional spending or changes to another Dify instance. Existing credentials,
