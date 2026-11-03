@@ -40,6 +40,20 @@ describe("transaction-attempt byte evidence", () => {
     await expect(attempt.read({ uri: "image", sha256: "0".repeat(64), byteLength: 3 })).rejects.toBe(failure);
   });
 
+  it("shares a final original across page validation and report manifest in one attempt only", async () => {
+    const original = new Uint8Array([1, 2, 3]);
+    const changed = new Uint8Array([4, 5, 6]);
+    const get = vi.fn().mockResolvedValueOnce(original).mockResolvedValueOnce(changed);
+    const store = { get } as unknown as AssetStore;
+    const evidence = { assetId: "final-page", uri: "final.png", sha256: createHash("sha256").update(original).digest("hex"), byteLength: original.byteLength };
+    const transaction = createVerificationAttempt(store);
+    await transaction.read(evidence); // Page illustration validation.
+    expect(await transaction.read(evidence)).toEqual(original); // Report manifest.
+    expect(get).toHaveBeenCalledTimes(1);
+    await expect(createVerificationAttempt(store).read(evidence)).rejects.toBeInstanceOf(ImageEvidenceMismatch);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("does not retain failed source verification or share it with another attempt", async () => {
     const attempt = createVerificationAttempt({} as AssetStore);
     const verify = vi.fn().mockRejectedValueOnce(new Error("stale")).mockResolvedValue(undefined);

@@ -10,6 +10,8 @@ import { realReportCarrier } from "@/lib/experiment-runner/real-report-carrier";
 import { executionPolicySnapshot } from "@/lib/experiment-runner/execution-policy";
 import { m4AuthorizedCarrier, m4CanonicalJson, m4Hash } from "@/lib/experiment-runner/m4-request";
 import { RECONCILIATION_RESERVE_MS } from "@/lib/operations/budget";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
+import { verificationMetadata } from "@/db/experiment-verification-metadata";
 
 type Identity = { runId: string; operationId: string; nowMs: number };
 type Journal = Array<{ assetId: string; versionId: string; sha256: string;
@@ -23,6 +25,7 @@ export function createRealReportPreparation(input: { database: Database; store: 
   const { database, store } = input;
   async function current(value: Identity, binding: BookletBinding) {
     return withMongoTransaction(database, async session => {
+      const attempt = createVerificationAttempt(store);
       const run = await database.collections.experiment_runs.findOne({ _id: value.runId }, { session });
       const operation = await database.collections.experiment_operations.findOne({ _id: value.operationId, runId: value.runId }, { session });
       if (!run || !operation || run.mode !== "real" || !run.execution || operation.mode !== "real" ||
@@ -38,12 +41,14 @@ export function createRealReportPreparation(input: { database: Database; store: 
       if (profile.policy.mode !== "real" || profile.hash !== run.execution.profileHash ||
           !publication || binding.appId !== publication.appId || binding.publishedWorkflowId !== publication.publishedWorkflowId)
         conflict("Real report publication differs from its frozen profile.");
-      const generation = await verifyExperimentGeneration(database, session, run, store, operation._id, "preparation", value.nowMs);
+      const generation = await verifyExperimentGeneration(database, session, run, store, operation._id, "preparation", value.nowMs, {}, attempt);
+      const snapshot = await verificationMetadata(database, session, run._id, attempt);
       const images = [];
       for (const final of generation.finalPages) {
-        const asset = await database.collections.assets.findOne({ _id: final.assetId, bookletId: run.bookletId }, { session });
-        if (!asset) conflict("Real report final image asset is absent.");
-        const bytes = Uint8Array.from(await store.get(asset.uri));
+        const asset = snapshot.assets.find(item => item._id === final.assetId && item.bookletId === run.bookletId);
+        if (!asset || !asset.metadataJson) conflict("Real report final image asset is absent.");
+        const original = JSON.parse(asset.metadataJson) as { sha256: string; byteLength: number };
+        const bytes = await attempt.read({ assetId: asset._id, uri: asset.uri, sha256: original.sha256, byteLength: original.byteLength });
         const checked = await validateExperimentImage(bytes);
         if (bytes.byteLength > MAX_REFERENCE_UPLOAD_BYTES || checked.mimeType !== asset.mimeType ||
             checked.width !== asset.width || checked.height !== asset.height) conflict("Real report final original differs from asset evidence.");

@@ -123,6 +123,14 @@ describe("Real workflow graph candidates", () => {
     const decoded = execute(node(graph, "real_decode").data.code, { authorization_body: JSON.stringify({ data }), status_code: 200 });
     expect(decoded.request_json).toBe(data.requestJson);
     expect(decoded.input_fingerprint).toBe(data.inputFingerprint);
+    for (const size of ["1024x1024", "1024x1536", "1536x1024"] as const) {
+      const { requestDigest: _digest, ...body } = request;
+      void _digest;
+      const sized = realImageRequest({ ...body, size });
+      const requestJson = m4CanonicalJson(sized);
+      expect(execute(node(graph, "real_decode").data.code, { authorization_body: JSON.stringify({ data: {
+        ...data, requestJson } }), status_code: 200 })).toMatchObject({ authorized: "yes", request_json: requestJson });
+    }
     for (const taskId of ["J08", "J09", "J10", "J13"]) {
       expect(execute(node(graph, "real_decode").data.code, { authorization_body: JSON.stringify({ data: {
         ...data, taskId } }), status_code: 200 })).toMatchObject({ authorized: "yes", request_json: data.requestJson });
