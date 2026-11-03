@@ -1,6 +1,6 @@
 # Dify booklet experiment — implementation and validation roadmap
 
-**Status:** M3 and efficiency acceptance remain complete. M4 completed on 2026-10-27 under the accepted generation/accounting criterion; Kid and Parent retain terminal advisory failures, and Creator retains two current reports. See the [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27). The user authorized M5 implementation. Real acceptance remains pending a separate finite spending grant and verified readiness.
+**Status:** M3 and efficiency acceptance remain complete. M4 completed on 2026-10-27 under its accepted generation/accounting criterion; see the [M4 exit](M4-balanced.md#m4-exit-evidence---2026-10-27). Real Kid completed with an approved replacement on 2026-11-03; the [Kid exit](M5-real.md#real-kid-exit-evidence---2026-11-03) retains both reports, original bytes and unknown liability. Parent and Creator Real acceptance remain pending separate finite grants. The user requested a new improvement branch and Kid comparison after baseline documentation publication; the [authorization register](EXECUTION.md#b-authorization-register) owns that scope and the separate paid-comparison gate.
 **Product contract:** [PRD.md](PRD.md)
 **Tracking:** [Issue #65](https://github.com/karpishe-experiments/agentic-poc/issues/65)
 
