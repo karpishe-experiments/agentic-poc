@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import sharp from "sharp";
+import { MongoServerError } from "mongodb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withMongoTransaction, type Database } from "@/db/client";
 import { createExecutionAllowanceLedger } from "@/db/experiment-execution-allowance";
@@ -36,6 +37,8 @@ import { OperationBudgetExpired } from "@/lib/operations/budget";
 import { createSettledReportRecovery } from "@/lib/operations/settled-report-recovery";
 import { withOperationBudget } from "@/lib/operations/budget";
 import { externalError } from "@/lib/experiment-runner/external-errors";
+import { verifyExperimentGeneration } from "@/db/experiment-completion";
+import { createVerificationAttempt } from "@/lib/experiment-runner/verification-attempt";
 
 const databases: Database[] = [], roots: string[] = [];
 afterEach(async () => {
@@ -53,7 +56,7 @@ function python(source: string, args: Record<string, unknown>): Record<string, u
 
 // Provider creativity is deterministic; claims, saved preparation, original bytes,
 // authenticated workflow readback, settlement and materialization are real services.
-async function setup(persona: Persona = "playful_kid", executionVersion: "execution_v1" | "execution_v2" = "execution_v1") {
+async function setup(persona: Persona = "playful_kid", executionVersion: "execution_v1" | "execution_v2" | "execution_v3" = "execution_v1") {
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("External provider HTTP is forbidden in this fixture."); });
   const database = await createTestDatabase({ seedAgents: false }); databases.push(database);
@@ -157,12 +160,16 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
           authorization_body: JSON.stringify({ data: { started: true, mode: "real", role: "image", taskId: operation.taskId,
             inputFingerprint: operation.inputFingerprint, requestJson: m4CanonicalJson(claim.realImageRequest) } }), status_code: 200 });
         expect(decoded.authorized).toBe("yes");
-        const bytes = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#74aadd" } }).png().toBuffer();
+        const [width, height] = claim.realImageRequest!.size.split("x").map(Number);
+        if (executionVersion === "execution_v3") {
+          expect(claim.realImageRequest!.size).toBe(operation.taskId === "J13" ? "1024x1536" : "1024x1024");
+        }
+        const bytes = await sharp({ create: { width, height, channels: 3, background: "#74aadd" } }).png().toBuffer();
         const providerResult = { schemaVersion: "booklet_real_image_result_v1", requestDigest: claim.realImageRequest!.requestDigest,
           adapterIdentity: REAL_IMAGE_ADAPTER_IDENTITY, requestedModel: REAL_IMAGE_MODEL, dispatchStarted: true,
           providerRequestId: `req_${workflowRunId}`, providerResponseId: `resp_${workflowRunId}`, providerModel: REAL_IMAGE_MODEL,
           status: "succeeded", usage: { inputTokens: 2, outputTokens: 3 },
-          output: { sha256: sha256(bytes), byteLength: bytes.length, mimeType: "image/png", width: 1024, height: 1024 }, failure: null };
+          output: { sha256: sha256(bytes), byteLength: bytes.length, mimeType: "image/png", width, height }, failure: null };
         await repository.observeRealImage({ ...identity, inputFingerprint: operation.inputFingerprint, result: providerResult, nowMs: now() });
         const stored = await createExperimentImageStorage({ database, store, now }).complete({
           identity: { ...identity, inputFingerprint: operation.inputFingerprint }, content: bytes });
@@ -181,6 +188,11 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
         const report = operation.realReportPreparation;
         if ("reportEvidence" in operationContext) {
           expect(report).toBeDefined();
+          if (executionVersion === "execution_v3") {
+            expect(operation.m4Preparation!.contextJson).toContain('"reportContextVersion":"real_report_context_v2"');
+            expect(operation.m4Preparation!.contextJson).not.toContain('"sheetPromptModule"');
+            expect(operation.m4Preparation!.systemPrompt).toContain("title-only approved cover");
+          }
           const fixture = simulatedExperimentReport({ ...operationContext.reportEvidence, mode: "simulated" });
           result = { kind: binding.role === "tester" ? "feedback" : "assessment", payload: { ...fixture, mode: "real",
             consistency: { status: "observed", explanation: "Fake provider inspected every supplied original image." },
@@ -220,7 +232,12 @@ async function setup(persona: Persona = "playful_kid", executionVersion: "execut
         let creative: unknown = { result };
         if (result.kind === "proposal" && result.payload.taskId === "J11") {
           const content = result.payload.content as { pages: Array<{ panels: Array<{ sheetReferences: Array<{ subjectKind: string; subjectId: string }> }> }> };
-          creative = { result: { ...result, payload: { ...result.payload, content: { ...content, pages: content.pages.map(page => ({ ...page,
+          const canvas = executionVersion === "execution_v3" ? { canvas: {
+            ...((content as unknown as { canvas: Record<string, unknown> }).canvas),
+            trim: { width: 140, height: 210, unit: "mm" }, orientation: "portrait",
+            aspectRatio: { width: 2, height: 3 }, workingPixels: { width: 1800, height: 2700 },
+          } } : {};
+          creative = { result: { ...result, payload: { ...result.payload, content: { ...content, ...canvas, pages: content.pages.map(page => ({ ...page,
             panels: page.panels.map(({ sheetReferences, ...panel }) => ({ ...panel,
               sheetSubjects: sheetReferences.map(({ subjectKind, subjectId }) => ({ subjectKind, subjectId })) })) })) } } } };
         }
@@ -579,8 +596,8 @@ describe("Real shared journey with fake providers and durable originals", () => 
     await expect(env.inspect(failed!._id)).rejects.toThrow("Retained Real image failure evidence differs.");
     expect(vi.mocked(env.runtime.start).mock.calls).toHaveLength(calls);
   }, 90_000);
-  it("completes Kid generation and both multimodal reports without manual data repair", async () => {
-    const env = await setup("playful_kid", "execution_v2");
+  it.each(["execution_v2", "execution_v3"] as const)("completes Kid generation and both multimodal reports without manual data repair (%s)", async (version) => {
+    const env = await setup("playful_kid", version);
     for (let step = 0; step < 180; step++) {
       const run = (await env.repository.getRun(env.runId))!;
       if (run.status === "completed") break;
@@ -601,6 +618,16 @@ describe("Real shared journey with fake providers and durable originals", () => 
         (item.m4Reservation?.settledMicrodollars ?? 0) + (item.m4Reservation?.unsettledMicrodollars ?? 0) +
         (item.realImageReservation?.settledMicrodollars ?? 0) + (item.realImageReservation?.unsettledMicrodollars ?? 0), 0);
       expect(report.m4Observation?.costEvidence?.estimatedUsd).toBe(exposure / 1_000_000);
+    }
+    if (version === "execution_v3") {
+      const imageRequests = operations.filter(item => item.role === "image");
+      expect(imageRequests.filter(item => item.taskId === "J13")).toHaveLength(4);
+      expect(imageRequests.filter(item => item.taskId !== "J13")).toHaveLength(5);
+      for (const image of imageRequests) {
+        const request = JSON.parse(image.realImagePreparation!.requestJson);
+        expect(request.size).toBe(image.taskId === "J13" ? "1024x1536" : "1024x1024");
+      }
+      expect(reports.every(report => report.realReportPreparation!.orderedImages.every(image => image.width === 1024 && image.height === 1536))).toBe(true);
     }
     expect(run.counters.payableImage).toBeGreaterThan(0);
     expect(run.counters.payableImage).toBe(run.counters.logicalImage);
@@ -623,6 +650,33 @@ describe("Real shared journey with fake providers and durable originals", () => 
     expect(independent.status, independent.stderr).toBe(0);
     expect(JSON.parse(independent.stdout)).toEqual(retainedFiles.map(() => true));
     await withMongoTransaction(env.database, session => verifyExecutionAccounting(env.database, session, run));
+    if (version === "execution_v3") {
+      // Report manifest construction and the actual final-image verifier share
+      // the same originals. A driver retry must create a new byte snapshot.
+      const reads = vi.spyOn(reopened, "get");
+      const finalImages = reports[0]!.realReportPreparation!.orderedImages;
+      let attempts = 0;
+      await withMongoTransaction(env.database, async session => {
+        attempts++;
+        const attempt = createVerificationAttempt(reopened);
+        for (const final of finalImages) {
+          const asset = (await env.database.collections.assets.findOne({ _id: final.assetId }, { session }))!;
+          await attempt.read({ assetId: asset._id, uri: asset.uri, sha256: final.sha256, byteLength: final.byteLength });
+        }
+        await verifyExperimentGeneration(env.database, session, run, reopened, undefined, "completion", undefined, {}, attempt);
+        if (attempts === 1) {
+          const retry = new MongoServerError({ message: "Controlled local transaction retry" });
+          retry.addErrorLabel("TransientTransactionError");
+          throw retry;
+        }
+      });
+      expect(attempts).toBe(2);
+      const counts = new Map<string, number>();
+      for (const [uri] of reads.mock.calls) counts.set(uri, (counts.get(uri) ?? 0) + 1);
+      expect(counts.size).toBe(9);
+      expect([...counts.values()]).toEqual(Array(9).fill(2));
+      reads.mockRestore();
+    }
     expect(env.runtime.retrieve).toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   }, 180_000);
