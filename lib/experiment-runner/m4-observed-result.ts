@@ -44,7 +44,7 @@ export function m4ObservedRoleResult(run: ExperimentRunDocument, operation: Expe
   const result = parseM4CreativeOutput(selector, observation.content, preparation.contextJson, observation.costEvidence,
     !!run.execution, "inspectedAssetIds" in assessed && Array.isArray(assessed.inspectedAssetIds)
       ? assessed.inspectedAssetIds as string[] : []);
-  if (run.execution && snapshot.policy.schemaVersion === "execution_v2" && operation.role === "manager" &&
+  if (run.execution && ["execution_v2", "execution_v3"].includes(snapshot.policy.schemaVersion) && operation.role === "manager" &&
       result.kind === "ask" && result.payload.question.length > 500) {
     throw new M4CreativeOutputError("Compact manager clarification exceeds 500 characters.");
   }

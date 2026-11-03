@@ -1199,3 +1199,14 @@ missing historical bodies are not evidence of missing current creative work.
 Evidence: the retained first-J12 count rejection and all-persona projection tests.
 Smaller inputs do not guarantee a later provider count will fit. Promotion
 candidate: **Documentation** for bounded agent evidence.
+
+## Test byte reuse through the real verification caller
+
+When a transaction shares verified image bytes, a cache-helper test alone does
+not establish that the final-image verifier uses that cache. The Kid fixture
+preloads final originals, invokes the actual generation verifier, forces a
+MongoDB transaction retry and counts one read per each of nine originals in
+each attempt. Keep the attempt inside the transaction callback; later attempts
+must read fresh bytes. Separate caller fixtures reject corruption after an
+upload boundary. Evidence: the v3 Real journey and report-preparation reuse
+fixtures. Promotion candidate: **Documentation** for verification-cache tests.

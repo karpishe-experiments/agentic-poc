@@ -106,7 +106,7 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
     if (!asset || asset.kind !== "page_source" || !asset.metadataJson || asset.width === null || asset.height === null) invalid("Saved page illustration asset is missing.", "invalid_assets");
     const metadata = assetMetadataSchema.parse(json(asset.metadataJson, "Saved page illustration metadata is malformed."));
     const decodedOutput = await decodedOutputEvidence(asset.uri, { sha256: metadata.sha256, byteLength: metadata.byteLength,
-      width: asset.width, height: asset.height });
+      width: asset.width, height: asset.height }, attempt, asset._id);
     const output = outputSchema.parse(decodedOutput.output);
     const outputWarnings = asset.mimeType === output.mimeType ? [] : [`Saved page asset ${asset._id} metadata MIME ${asset.mimeType} differs from decoded ${output.mimeType}.`];
     const expectedSummary = { assetId: asset._id, sha256: output.sha256, uri: asset.uri };
@@ -169,9 +169,10 @@ export function createExperimentPageIllustrationAssembly(input: { database: Data
       bytes: { uri: asset.uri, output } };
   }
 
-  async function decodedOutputEvidence(uri: string, expected: { sha256: string; byteLength: number; width: number; height: number }) {
+  async function decodedOutputEvidence(uri: string, expected: { sha256: string; byteLength: number; width: number; height: number },
+    attempt?: VerificationAttempt, assetId?: string) {
     try {
-      const bytes = await store.get(uri);
+      const bytes = attempt ? await attempt.read({ assetId, uri, sha256: expected.sha256, byteLength: expected.byteLength }) : await store.get(uri);
       const decoded = await validateExperimentImage(bytes);
       if (decoded.byteLength !== expected.byteLength || decoded.sha256 !== expected.sha256 || decoded.width !== expected.width ||
         decoded.height !== expected.height || createHash("sha256").update(bytes).digest("hex") !== expected.sha256) {

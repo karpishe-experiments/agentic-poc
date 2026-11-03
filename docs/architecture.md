@@ -788,6 +788,24 @@ model limit is shared by preparation, reservation and provider-result assessment
 tester decision limits remain 2,048 tokens. The Real manager publication must
 match this setting before its readiness record selects `execution_v2`.
 
+New Real readiness selects `execution_v3`. Saved v1/v2 policies retain their
+request hashes and behavior. V3 retains the compact v2 manager and selects J13
+provider size from the verified J11 canvas orientation: portrait uses 1024x1536,
+landscape uses 1536x1024, and square uses 1024x1024. Auxiliary images keep their
+fixed size. Original bytes remain unchanged; other aspect ratios remain advisory.
+V3 report requests use `real_report_context_v2`: approved creative content,
+exact J12 lettering, canvas, source identities and warnings remain evidence;
+duplicate sheet modules and final-image generation requests are omitted. The
+report instruction makes current approved J12 lettering authoritative, including
+a title-only cover. The native carrier still supplies all ordered final originals.
+
+Real report preparation shares verified metadata and original bytes inside each
+transaction attempt. Generation verification and manifest construction retain
+their hash, length, MIME and dimension checks. Retries, later upload iterations
+and subsequent phases create fresh attempts. Recovered successful reports show
+their saved result separately from the failed original attempt; stored history
+and pause behavior remain unchanged.
+
 The protected candidate-reconciliation entrypoint routes the exact retained M5
 manager failure to a separate execution-profile proof service. It retrieves the
 original saved publication, fingerprints target metadata and reservations, and

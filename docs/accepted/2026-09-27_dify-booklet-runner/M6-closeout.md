@@ -111,6 +111,25 @@ recheck names, storage, transfers and consumers before publication.
   wall time from provider duration. Record the comparison here; do not claim that
   one run establishes general model-quality superiority.
 
+### Implementation verification
+
+The application candidate selects `execution_v3` for new runs and keeps retained
+v1/v2 hashes unchanged. Fake-provider Kid journeys pass for both v2 and v3,
+including normal generation, both multimodal reports and accounting. V3 requests
+four portrait final images while five auxiliary images remain square. Focused
+fixtures verify the report projection and recovered-result display. Caller-level
+report-preparation fixtures prove one read per original in each transaction and
+fresh reads with corruption rejection after an upload boundary. The unchanged
+Dify decode and image adapter pass all three supported request sizes through.
+The actual generation/final-image verifier reads all nine originals once per
+attempt in a forced MongoDB transaction retry. Direct request tests cover all
+three orientations, legacy fixed sizing and rejected stale source evidence.
+
+These results establish local behavior only. Review, CI, staging delivery and
+the separately authorized paid comparison remain pending. No new variable,
+credential name, storage location, transfer or consumer was added or changed;
+the credential inventory requires no update.
+
 ## Entry gate
 
 Read M5's retained runs, failures, reports and usage, then revise this file with

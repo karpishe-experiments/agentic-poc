@@ -79,7 +79,15 @@ export function realRequestBundleHash() {
 // Historical v1 definitions above are immutable inputs to retained profile hashes.
 export function executionDefinitionFor(policy: Pick<ExecutionPolicy, "mode" | "schemaVersion">, selector: M4RequestSelector) {
   const base = policy.mode === "real" ? realRequestDefinition(selector) : executionRequestDefinition(selector);
-  if (policy.schemaVersion !== "execution_v2" || selector.role !== "manager") return base;
+  if (policy.schemaVersion === "execution_v3" && selector.report) {
+    const { hash: _prior, ...contents } = base;
+    void _prior;
+    const definition = { ...contents, version: "real_advisory_compact_v3",
+      systemPrompt: `${base.systemPrompt} Required visible lettering is exactly the current approved J12 Page Bible lettering for each panel, including noText. Manuscript and layout routing are continuity evidence; they do not require additional words absent from that Page Bible. In particular, a title-only approved cover does not require manuscript narration or dialogue. Generation prompt envelopes are omitted; assess the supplied approved creative facts and actual final images.`,
+      projection: { ...contents.projection, artifactProjection: "real_report_context_v2" } };
+    return { ...definition, hash: m4Hash(m4CanonicalJson(definition)) };
+  }
+  if (!["execution_v2", "execution_v3"].includes(policy.schemaVersion) || selector.role !== "manager") return base;
   const delegate = roleResultSchema.options.find(option => option.shape.kind.value === "delegate")!;
   const ask = z.strictObject({ kind: z.literal("ask"), payload: z.strictObject({ question: z.string().min(1).max(500) }) });
   const { hash: _prior, ...contents } = base;
@@ -99,6 +107,17 @@ export function executionV2RequestBundleHash() {
     ...specialistTaskSchema.options.map(taskId => ({ role: "specialist" as const, taskId, persona, report: false })),
   ]);
   return m4Hash(m4CanonicalJson(selectors.map(selector => executionDefinitionFor({ mode: "real", schemaVersion: "execution_v2" }, selector))));
+}
+
+export function executionV3RequestBundleHash() {
+  const selectors: M4RequestSelector[] = personaSchema.options.flatMap(persona => [
+    { role: "manager", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: false },
+    { role: "tester", taskId: null, persona, report: true },
+    { role: "judge", taskId: null, persona, report: true },
+    ...specialistTaskSchema.options.map(taskId => ({ role: "specialist" as const, taskId, persona, report: false })),
+  ]);
+  return m4Hash(m4CanonicalJson(selectors.map(selector => executionDefinitionFor({ mode: "real", schemaVersion: "execution_v3" }, selector))));
 }
 
 /** Execution profiles retain the M4 carrier and preparation lifecycle. */

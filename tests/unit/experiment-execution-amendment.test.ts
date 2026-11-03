@@ -40,6 +40,7 @@ describe("Recorded diagnostic execution amendments", () => {
   it("rejects model, price, image setting and unrelated publication changes", () => {
     for (const edit of [
       (p: ReturnType<typeof fixture>["next"]) => { p.realImage!.quality = "medium"; },
+      (p: ReturnType<typeof fixture>["next"]) => { p.realImage!.pageSizePolicy = "approved_canvas_orientation_v1"; },
       (p: ReturnType<typeof fixture>["next"]) => { p.models.decision.maxOutputTokens = 8192; },
       (p: ReturnType<typeof fixture>["next"]) => { p.publications.find(b => b.role === "manager")!.publishedWorkflowId = m4TestId(401); },
     ]) {
