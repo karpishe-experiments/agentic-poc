@@ -51,6 +51,16 @@ Also account for failure diagnostics written outside the failed transaction:
 they change full-row hashes even when report writes roll back. An abort must
 prove the difference; it must not ignore or delete diagnostic evidence.
 
+The reviewed correction subsequently saved the original tester and passed full
+verification before and after restart. Normal Resume admitted one judge; its late
+successful result paused the run again. A final normal Resume completed the run
+at revision 1642 with unchanged 45 text/10 image/55 step counters. A saved report
+and a terminal run are separate checkpoints. After late-result recovery, inspect
+the run's pause state and complete normal final verification; do not rerun the
+provider. The [Kid exit evidence](M5-real.md#real-kid-exit-evidence---2026-11-03)
+records the protected reads and deployment checks. The trace's stale failed
+attempt label is a presentation finding, not evidence that the saved result failed.
+
 ### Propagate the owning maintenance deadline through storage
 
 A backup storage request was aborted by the operation budget timer while the
@@ -1189,3 +1199,14 @@ missing historical bodies are not evidence of missing current creative work.
 Evidence: the retained first-J12 count rejection and all-persona projection tests.
 Smaller inputs do not guarantee a later provider count will fit. Promotion
 candidate: **Documentation** for bounded agent evidence.
+
+## Test byte reuse through the real verification caller
+
+When a transaction shares verified image bytes, a cache-helper test alone does
+not establish that the final-image verifier uses that cache. The Kid fixture
+preloads final originals, invokes the actual generation verifier, forces a
+MongoDB transaction retry and counts one read per each of nine originals in
+each attempt. Keep the attempt inside the transaction callback; later attempts
+must read fresh bytes. Separate caller fixtures reject corruption after an
+upload boundary. Evidence: the v3 Real journey and report-preparation reuse
+fixtures. Promotion candidate: **Documentation** for verification-cache tests.

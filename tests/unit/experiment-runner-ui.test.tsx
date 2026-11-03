@@ -704,6 +704,20 @@ describe("booklet runner inspector", () => {
     expect(screen.getByText("Operation trace (1)")).toBeTruthy();
     expect(screen.getByText("Workflow workflow-1 · Parent parent-1")).toBeTruthy();
   });
+  it.each([
+    ["succeeded", "failed", 123, "Result: succeeded. Compared with original attempt: failed."],
+    ["succeeded", "succeeded", undefined, null],
+    ["unknown", "failed", undefined, null],
+  ])("distinguishes %s result from %s original attempt", async (state, attemptOutcome, recoveredAtMs, resultText) => {
+    const operation = { ...run.operationHistory[0], state, lifecycle: { phase: "finished", startedAtMs: 1,
+      lastProgressAtMs: 2, attemptOutcome, recoveredAtMs, unresolved: state === "unknown" } };
+    fetchMock.mockResolvedValue(Response.json({ data: [{ ...run, operationHistory: [operation] }] }));
+    render(<BookletRunner focusedRunId={run.runId} />);
+    fireEvent.click(await screen.findByText("Operation trace (1)"));
+    expect(screen.getByText(new RegExp(`Original attempt: ${attemptOutcome}`))).toBeTruthy();
+    if (resultText) expect(screen.getByText(resultText)).toBeTruthy();
+    else expect(screen.queryByText("Result: succeeded. Compared with original attempt: failed.")).toBeNull();
+  });
   it("posts selected simulated creation with one retained replay key and revision controls", async () => {
     fetchMock.mockImplementation(async (_url: string, options?: RequestInit) => new Response(JSON.stringify({ data: options?.method === "POST" ? run : [run] }), { status: 200 }));
     render(<BookletRunner />);

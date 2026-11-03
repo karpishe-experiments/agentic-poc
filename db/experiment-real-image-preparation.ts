@@ -32,10 +32,16 @@ export async function currentRealImageRequest(database: Database, session: Clien
     conflict("Real image logical request differs from its saved operation.");
   }
   let references: RealImageRequest["references"] = [];
+  let size = policy.realImage.size;
   if (operation.taskId === "J13") {
     const sources = await verifyCurrentPageIllustrationSources(database, session, run, operation.subjectId, store);
     if (m4CanonicalJson(sources.request.request) !== m4CanonicalJson(logical)) {
       conflict("Real page image sources changed.");
+    }
+    if (policy.realImage.pageSizePolicy === "approved_canvas_orientation_v1") {
+      if (!sources.layout) conflict("Real page image has no verified canvas.");
+      const sizes = { portrait: "1024x1536", landscape: "1536x1024", square: "1024x1024" } as const;
+      size = sizes[sources.layout.canvas.orientation];
     }
     references = sources.attachments.map(item => ({ assetId: item.assetId,
       versionId: item.artifactVersionId, sha256: item.sha256, byteLength: item.byteLength,
@@ -52,7 +58,7 @@ export async function currentRealImageRequest(database: Database, session: Clien
   if (logical.prompt.length > 32_000) conflict("Image prompt exceeds the provider's 32,000-character limit.");
   return realImageRequest({ schemaVersion: "booklet_real_image_request_v1",
     operation: references.length ? "edit" : "generate", prompt: logical.prompt,
-    model: policy.realImage.model, size: policy.realImage.size, quality: policy.realImage.quality,
+    model: policy.realImage.model, size, quality: policy.realImage.quality,
     background: policy.realImage.background, outputFormat: policy.realImage.outputFormat,
     n: policy.realImage.n, retries: policy.realImage.retries,
     timeoutSeconds: policy.realImage.timeoutSeconds,

@@ -26,6 +26,18 @@ the error names the missing setting without printing its value.
 
 ## Current deployment status
 
+### Current staging acceptance release
+
+Staging serves commit `fa1e4f14e1dce1eb6b548bc308d280df2a33fcfe`, image
+`sha256:022edfda1bd7210e09816329974e0ca71888ac3966eb75b2cafe0d4b8d5ced98`.
+Deployment request `41591247099-1` completed and archived; protected status
+`41592988910` and independent Check `41593064619` verified it. Its GitHub observer
+expired while the detached host backup continued; no deployment replay occurred.
+The retained tester recovery and final Kid outcome are complete in the
+[Kid exit record](../accepted/2026-09-27_dify-booklet-runner/M5-real.md#real-kid-exit-evidence---2026-11-03).
+Do not repeat its root preparation, abort or recovery apply. The supported
+procedures below describe capability, not a pending action for that completed run.
+
 ### Supported recovery candidate
 
 For a successful, settled Real tester or judge with an unsaved report, the

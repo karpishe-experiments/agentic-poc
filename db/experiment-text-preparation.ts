@@ -1,3 +1,4 @@
+import { projectRealReportContext } from "@/lib/experiment-runner/real-report-context";
 import type { ClientSession } from "mongodb";
 import { z } from "zod";
 import { withMongoTransaction, type Database } from "@/db/client";
@@ -158,8 +159,11 @@ export function createM4TextPreparation(database: Database, authority: M4Authori
     if (before.operation.dispatchStartedAtMs != null) conflict("M4 preparation must precede dispatch.");
     const rawContext = await measurePhase(input, "preparation_current_role_evidence", () => contexts.getPreparationContext({ ...input, nowMs: now() }));
     const { context, contextJson } = await measurePhase(input, "preparation_context_projection", async () => {
-      const context = projectM4Context(selector, { ...rawContext,
+      let context = projectM4Context(selector, { ...rawContext,
         revisionCounts: { text: before.run.textRevisions, image: before.run.imageRevisions } }, input.operationId);
+      if (isExecution && snapshot.policy.schemaVersion === "execution_v3" && selector.report) {
+        context = projectRealReportContext(context);
+      }
       if (isExecution && selector.role === "tester" && !selector.report) {
         const allowance = await withMongoTransaction(database, async session => {
           const row = await database.collections.experiment_campaigns.findOne({ _id: campaignId }, { session });

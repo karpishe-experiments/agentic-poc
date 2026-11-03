@@ -788,6 +788,24 @@ model limit is shared by preparation, reservation and provider-result assessment
 tester decision limits remain 2,048 tokens. The Real manager publication must
 match this setting before its readiness record selects `execution_v2`.
 
+New Real readiness selects `execution_v3`. Saved v1/v2 policies retain their
+request hashes and behavior. V3 retains the compact v2 manager and selects J13
+provider size from the verified J11 canvas orientation: portrait uses 1024x1536,
+landscape uses 1536x1024, and square uses 1024x1024. Auxiliary images keep their
+fixed size. Original bytes remain unchanged; other aspect ratios remain advisory.
+V3 report requests use `real_report_context_v2`: approved creative content,
+exact J12 lettering, canvas, source identities and warnings remain evidence;
+duplicate sheet modules and final-image generation requests are omitted. The
+report instruction makes current approved J12 lettering authoritative, including
+a title-only cover. The native carrier still supplies all ordered final originals.
+
+Real report preparation shares verified metadata and original bytes inside each
+transaction attempt. Generation verification and manifest construction retain
+their hash, length, MIME and dimension checks. Retries, later upload iterations
+and subsequent phases create fresh attempts. Recovered successful reports show
+their saved result separately from the failed original attempt; stored history
+and pause behavior remain unchanged.
+
 The protected candidate-reconciliation entrypoint routes the exact retained M5
 manager failure to a separate execution-profile proof service. It retrieves the
 original saved publication, fingerprints target metadata and reservations, and
@@ -867,20 +885,20 @@ the run paused and remains in append-only campaign history. Ordinary Resume
 cannot clear a pending request. New page-image requests carry an explicit
 version tag for more than two approved revisions; untagged M4 requests retain
 their original two-revision validation and fingerprints. The UI shows the
-request, current liabilities and exact finite USD totals. No live M5 campaign
-or paid execution is established by this local implementation.
+request, current liabilities and exact finite USD totals. Live grants and outcomes
+are recorded in the [M5 exit evidence](accepted/2026-09-27_dify-booklet-runner/M5-real.md#real-kid-exit-evidence---2026-11-03); local implementation alone grants no spending.
 
 ## Artifact and decision flow
 
 ### Issue #65 local foundation
 
-The current full suite has eighteen Community bindings: manager, J01-J12,
-three testers, simulated image transport (including J13), and judge. Simulated
-acceptance is complete. Balanced Kid and Parent have verified generation with
-incomplete advisory evaluation; the admitted Creator is stopped at a J12
-preparation failure pending reviewed delivery of its exact continuation grant. The subsections
-below retain incremental foundation details; current live status is owned by the
-[M4 record](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md).
+The full suite has eighteen Community bindings: manager, J01-J12, three testers,
+image transport (including J13), and judge. Simulated and Balanced acceptance
+are complete under their recorded criteria. Real Kid completed with an approved
+replacement and retained unknown liability. The incremental foundation details
+below are historical; [M4](accepted/2026-09-27_dify-booklet-runner/M4-balanced.md)
+and [M5](accepted/2026-09-27_dify-booklet-runner/M5-real.md#real-kid-exit-evidence---2026-11-03)
+own current acceptance evidence and remaining persona scope.
 
 The [Dify booklet experiment](accepted/2026-09-27_dify-booklet-runner/PRD.md)
 has a separate `dify_booklet_v1` booklet profile. Its current local foundation

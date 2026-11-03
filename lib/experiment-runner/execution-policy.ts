@@ -4,7 +4,7 @@ import { opaqueIdSchema } from "@/lib/contracts/common";
 import { CASES, personaSchema } from "@/lib/contracts/experiment-runner";
 import { savedConfigurationItemSchema } from "@/lib/experiment-runner/config";
 import { m4PolicySchema, m4TokenPolicySchema, m4TokenPolicySnapshot, type M4Policy, type M4TokenPolicy } from "@/lib/experiment-runner/m4-policy";
-import { executionRequestBundleHash, realRequestBundleHash, executionV2RequestBundleHash } from "@/lib/experiment-runner/execution-request";
+import { executionRequestBundleHash, realRequestBundleHash, executionV2RequestBundleHash, executionV3RequestBundleHash } from "@/lib/experiment-runner/execution-request";
 import type { ExperimentOperationDocument } from "@/db/documents";
 import { REAL_IMAGE_ADAPTER_IDENTITY, REAL_IMAGE_MODEL } from "@/lib/experiment-runner/real-image-contract";
 import { REAL_REPORT_ADAPTER_IDENTITY } from "@/lib/experiment-runner/real-report-carrier";
@@ -16,7 +16,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/);
 // This is a technical execution snapshot. Spending authority is recorded only
 // in the campaign's separate append-only allowance history.
 export const executionPolicySchema = z.strictObject({
-  schemaVersion: z.enum(["execution_v1", "execution_v2"]),
+  schemaVersion: z.enum(["execution_v1", "execution_v2", "execution_v3"]),
   mode: z.enum(["balanced", "real"]),
   provider: m4PolicySchema.shape.provider,
   protocol: m4PolicySchema.shape.protocol,
@@ -38,6 +38,7 @@ export const executionPolicySchema = z.strictObject({
     // Keep saved dev1 profiles readable; new readiness pins only the reviewed dev2.
     pluginIdentity: z.string().regex(/^langgenius\/openai_tool:0\.2\.2-dev[123]@[0-9a-f]{64}$/), packageSha256: digest,
     nativeFileOrigin: z.literal("https://dify.uniwares.co.uk"),
+    pageSizePolicy: z.literal("approved_canvas_orientation_v1").optional(),
     model: z.literal(REAL_IMAGE_MODEL), size: z.enum(["1024x1024", "1536x1024", "1024x1536"]),
     quality: z.enum(["low", "medium", "high", "xhigh", "max"]),
     background: z.enum(["opaque", "transparent"]), outputFormat: z.enum(["png", "jpeg", "webp"]),
@@ -54,10 +55,13 @@ export const executionPolicySchema = z.strictObject({
       policy.mode === "balanced" && (policy.realImage || policy.realReport)) {
     context.addIssue({ code: "custom", message: "Real adapters belong only to a complete Real profile." });
   }
-  const requestHash = policy.schemaVersion === "execution_v2" ? executionV2RequestBundleHash() :
+  const requestHash = policy.schemaVersion === "execution_v3" ? executionV3RequestBundleHash() : policy.schemaVersion === "execution_v2" ? executionV2RequestBundleHash() :
     policy.mode === "real" ? realRequestBundleHash() : executionRequestBundleHash();
-  if (policy.schemaVersion === "execution_v2" && policy.mode !== "real") {
+  if (["execution_v2", "execution_v3"].includes(policy.schemaVersion) && policy.mode !== "real") {
     context.addIssue({ code: "custom", message: "The compact manager profile is Real only." });
+  }
+  if ((policy.schemaVersion === "execution_v3") !== (policy.realImage?.pageSizePolicy != null)) {
+    context.addIssue({ code: "custom", message: "Page orientation policy requires its new Real profile." });
   }
   if (policy.requestDefinitionHash !== requestHash) {
     context.addIssue({ code: "custom", message: "Request definitions differ from the reviewed bundle." });
@@ -136,10 +140,10 @@ export function realExecutionPolicyFromM4TechnicalProfile(source: M4Policy, toke
   bindings: ExecutionPolicy["publications"], adapters: {
     textPluginIdentity: string; textPackageSha256: string;
     imagePluginIdentity: string; imagePackageSha256: string;
-    executionVersion?: "execution_v1" | "execution_v2";
+    executionVersion?: "execution_v1" | "execution_v2" | "execution_v3";
   }): ExecutionPolicy {
   const version = adapters.executionVersion ?? "execution_v1";
-  const requestHash = version === "execution_v2" ? executionV2RequestBundleHash() : realRequestBundleHash();
+  const requestHash = version === "execution_v3" ? executionV3RequestBundleHash() : version === "execution_v2" ? executionV2RequestBundleHash() : realRequestBundleHash();
   return executionPolicySchema.parse({ schemaVersion: version, mode: "real",
     provider: source.provider, protocol: source.protocol, serviceTier: source.serviceTier,
     apiBaseUrl: source.apiBaseUrl, pluginIdentity: adapters.textPluginIdentity,
@@ -151,7 +155,8 @@ export function realExecutionPolicyFromM4TechnicalProfile(source: M4Policy, toke
     models: source.models, tokenPolicy, publications: bindings,
     realImage: { adapterIdentity: REAL_IMAGE_ADAPTER_IDENTITY,
       pluginIdentity: adapters.imagePluginIdentity, packageSha256: adapters.imagePackageSha256,
-      nativeFileOrigin: "https://dify.uniwares.co.uk", model: REAL_IMAGE_MODEL,
+      nativeFileOrigin: "https://dify.uniwares.co.uk",
+      ...(version === "execution_v3" ? { pageSizePolicy: "approved_canvas_orientation_v1" as const } : {}), model: REAL_IMAGE_MODEL,
       size: "1024x1024", quality: "high", background: "opaque", outputFormat: "png",
       n: 1, retries: 0, timeoutSeconds: 270, maxReferences: 15,
       planningLiability: "remaining_allowance_hold_v1",
@@ -164,7 +169,7 @@ export function realExecutionPolicyFromM4TechnicalProfile(source: M4Policy, toke
 }
 
 export function executionTextModel(policy: ExecutionPolicy, bucket: keyof ExecutionPolicy["models"], role: ExperimentOperationDocument["role"]) {
-  return policy.schemaVersion === "execution_v2" && role === "manager"
+  return ["execution_v2", "execution_v3"].includes(policy.schemaVersion) && role === "manager"
     ? { ...policy.models[bucket], maxOutputTokens: 4096 } : policy.models[bucket];
 }
 

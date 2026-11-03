@@ -38,7 +38,7 @@ export function m4RetainedProviderWrapper(content: string, providerEvidence: unk
 // and model creative content cannot supply accounting evidence. The result is
 // independent of creative JSON validity, so malformed content cannot erase usage.
 export function assessM4ProviderResult(raw: unknown, policyRaw: unknown, operation: ExperimentOperationDocument) {
-  const execution = !!policyRaw && typeof policyRaw === "object" && "schemaVersion" in policyRaw && ["execution_v1", "execution_v2"].includes(String(policyRaw.schemaVersion));
+  const execution = !!policyRaw && typeof policyRaw === "object" && "schemaVersion" in policyRaw && ["execution_v1", "execution_v2", "execution_v3"].includes(String(policyRaw.schemaVersion));
   const snapshot = execution ? executionPolicySnapshot(policyRaw) : m4PolicySnapshot(policyRaw);
   const policy = snapshot.policy;
   const wrapper = m4ProviderReadbackSchema.parse(raw);

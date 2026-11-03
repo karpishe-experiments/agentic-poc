@@ -36,6 +36,27 @@ const ready = {
 } as const;
 
 describe("staging Real readiness manifest", () => {
+  it("adds new-only orientation and report evidence without changing v1/v2 hashes", () => {
+    const current = realReadinessManifestSchema.options[1].parse(delivered);
+    const snapshot = (executionVersion: "execution_v2" | "execution_v3") => executionPolicySnapshot(
+      realExecutionPolicyFromM4TechnicalProfile(current.sourcePolicy, current.tokenPolicy, current.publications,
+        { ...current, executionVersion }));
+    const old = snapshot("execution_v2"), next = snapshot("execution_v3");
+    expect(old.hash).toBe("e0138a67f748fc39301e8df6ee99284e9cafd51280f60eff972b9a4046edeb3d");
+    expect(old.policy.realImage).not.toHaveProperty("pageSizePolicy");
+    expect(next.policy.realImage?.pageSizePolicy).toBe("approved_canvas_orientation_v1");
+    expect(executionPolicySnapshot(JSON.parse(old.json)).hash).toBe(old.hash);
+    expect(next.hash).not.toBe(old.hash);
+    const manager = { role: "manager" as const, taskId: null, persona: "playful_kid" as const, report: false };
+    expect(executionDefinitionFor(next.policy, manager)).toEqual(executionDefinitionFor(old.policy, manager));
+    expect(executionMaximumTextCharge(next.policy, "decision", "manager")).toBe(executionMaximumTextCharge(old.policy, "decision", "manager"));
+    const judge = { ...manager, role: "judge" as const, report: true };
+    expect(executionDefinitionFor(next.policy, judge).hash).not.toBe(executionDefinitionFor(old.policy, judge).hash);
+    expect(executionDefinitionFor(next.policy, judge).systemPrompt).toContain("title-only approved cover");
+    expect(() => executionPolicySnapshot({ ...old.policy, realImage: next.policy.realImage })).toThrow();
+    expect(() => executionPolicySnapshot({ ...next.policy, realImage: old.policy.realImage })).toThrow();
+  });
+
   it("selects corrected report publications without changing the retained technical settings", () => {
     const current = fixtureReadinessSchema.parse(reportCorrected), historical = fixtureReadinessSchema.parse(retained);
     if (current.state !== "ready" || historical.state !== "ready") throw Error("Missing readiness");
@@ -91,7 +112,7 @@ describe("staging Real readiness manifest", () => {
         ? { ...item, publishedWorkflowId: "ab5ca725-8268-40ca-912a-a4d432fbcac6" } : item.role === "manager"
           ? { ...item, publishedWorkflowId: "6e1ebf6d-94e1-4265-9733-764504a0ddba" } : item),
     };
-    const profile = (adapters: Omit<typeof prior, "executionVersion"> & { executionVersion?: "execution_v1" | "execution_v2" }) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
+    const profile = (adapters: Omit<typeof prior, "executionVersion"> & { executionVersion?: "execution_v1" | "execution_v2" | "execution_v3" }) => executionPolicySnapshot(realExecutionPolicyFromM4TechnicalProfile(
       current.sourcePolicy, current.tokenPolicy, adapters.publications, adapters));
     const saved = profile(prior);
     expect(saved.hash).toBe("be8c15176efd57612ae48ca13f4de4b9932a5d14c1ccf0b88d5632a713532375");
@@ -104,8 +125,9 @@ describe("staging Real readiness manifest", () => {
     expect(() => profile({ ...prior, imagePluginIdentity: prior.imagePluginIdentity.replace("dev1", "dev4") })).toThrow();
   });
 
-  it("changes only diagnostic adapters and the verified image publication for the release candidate", () => {
+  it("selects v3 with the verified diagnostic adapters and image publication", () => {
     expect(delivered).toEqual({ ...reportCorrected,
+      executionVersion: "execution_v3",
       textPluginIdentity: REAL_TEXT_PLUGIN_IDENTITY, textPackageSha256: REAL_TEXT_PACKAGE_SHA256,
       imagePluginIdentity: REAL_IMAGE_PLUGIN_IDENTITY, imagePackageSha256: REAL_IMAGE_PACKAGE_SHA256,
       publications: reportCorrected.publications.map(item => item.role === "image"

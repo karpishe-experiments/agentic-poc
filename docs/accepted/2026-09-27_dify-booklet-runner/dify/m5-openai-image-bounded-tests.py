@@ -71,9 +71,9 @@ adapter.File = NativeFile
 adapter.verify_stdio_sdk = lambda: None
 
 
-def request(operation="generate", blobs=(), prompt="A Persian قاصدک"):
+def request(operation="generate", blobs=(), prompt="A Persian قاصدک", size="1024x1024"):
     refs = [dict(assetId=f"00000000-0000-4000-8000-{i + 1:012d}", versionId=f"00000000-0000-4000-8000-{i + 101:012d}", sha256=hashlib.sha256(blob).hexdigest(), byteLength=len(blob), mimeType="image/png", width=1024, height=1024) for i, blob in enumerate(blobs)]
-    body = dict(schemaVersion=adapter.SCHEMA, operation=operation, prompt=prompt, model=adapter.MODEL, size="1024x1024", quality="high", background="opaque", outputFormat="png", n=1, retries=0, timeoutSeconds=60, deadlineAtMs=120000, references=refs)
+    body = dict(schemaVersion=adapter.SCHEMA, operation=operation, prompt=prompt, model=adapter.MODEL, size=size, quality="high", background="opaque", outputFormat="png", n=1, retries=0, timeoutSeconds=60, deadlineAtMs=120000, references=refs)
     digest = hashlib.sha256(adapter.canonical(body).encode()).hexdigest()
     return adapter.canonical({**body, "requestDigest": digest}), digest
 
@@ -104,6 +104,16 @@ def provider_response(encoded=None):
 
 
 class ImageContract(unittest.TestCase):
+
+    def test_supported_sizes_reach_the_single_provider_call(self):
+        for size in ("1024x1024", "1024x1536", "1536x1024"):
+            with self.subTest(size=size):
+                raw, _ = request(size=size)
+                factory = Factory(provider_response())
+                result, _ = run(raw, [], {"openai_api_key": "test"}, client_factory=factory, now=lambda: 1)
+                self.assertEqual(result["status"], "succeeded")
+                self.assertEqual(len(factory.methods), 1)
+                self.assertEqual(factory.methods[0][1]["size"], size)
 
     def test_raw_cookie_and_signed_url_diagnostics_are_redacted(self):
         error = RuntimeError('upstream failed\nCookie: session=sample-private-cookie\nSet-Cookie: session=sample-private-cookie')
