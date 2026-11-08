@@ -1,0 +1,17 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 04f41f7..4bd9170 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -272,8 +272,10 @@ async function authMain(args: string[], flags: Record<string, unknown>): Promise
+         process.stderr.write(`\nOpen this URL and enter the code:\n  ${info.verification_uri_complete ?? info.verification_uri ?? "(url unknown)"}\n  code: ${info.user_code ?? "(see browser)"}\n\nwaiting for approval...\n`);
+       });
+       if (result.ok) {
+-        const token = typeof result.data.access_token === "string" ? result.data.access_token : null;
+-        if (token) storeToken(base, "openapi_token", token);
++        const token = [result.data.access_token, result.data.token]
++          .find((value): value is string => typeof value === "string" && value.trim().length > 0);
++        if (!token) return finish(err("AUTH_REQUIRED", "Device login returned no usable token"), flags);
++        storeToken(base, "openapi_token", token);
+       }
+       return finish(result.ok ? { ok: true, data: { stored: true, base_url: base } } : (result as Result<unknown>), flags);
+     }
