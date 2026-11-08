@@ -2,6 +2,8 @@
 
 These are agreed target requirements for future implementation. They are not implemented by this experiment reference package. Unitale's canonical repository is [Uniwares-LTD/unitale](https://github.com/Uniwares-LTD/unitale). Extend its existing booklet T18–T20 work and reconcile its PRD/contracts rather than creating a competing architecture.
 
+Deployment scope is **staging only**. Follow the [staging runbook](staging-runbook.md) for source access, reproducible control tooling, Unitale environment ownership/MCP prerequisites, provider compatibility and publication. Production promotion remains a separate approval. Current console inventory does not prove runtime ownership or live composition. The Booklet adapters require a compatibility decision; their prepared carriers and image callbacks are not Unitale drop-ins. Record effective child Workflow Tool bindings because a pinned Manager does not transitively pin its children.
+
 ## Seven roles and ownership
 
 | Target workflow | Experiment material | Responsibility |

@@ -10,6 +10,7 @@ Code source: [`1d4cc02307edad21aadefc244bcc4e286396b88f`](https://github.com/kar
 - [Context and contracts](context-and-contracts.md): fetching, projection, schema binding, final request construction and a synthetic J02 trace.
 - [Image requests](image-requests.md): exact static assembly text, dynamic substitutions, style/reference/page requests and image revisions. J13 belongs here; the source text-task enum contains J01–J12 only.
 - [Unitale migration](unitale-migration.md): agreed target ownership, seven roles, quality gates and correction policy.
+- [Staging runbook and handoff prompt](staging-runbook.md): source/tool access, reproducible setup, runtime prerequisites, adapter compatibility, effective child bindings and staged verification.
 - [Workflow inventory](../README.md#workflow-inventory): each workflow links to its own `prompts.md`, including exact effective instructions and applicable catalog keys.
 
 ## Reading the catalog

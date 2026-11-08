@@ -12,6 +12,8 @@ Booklet chooses eligible work, retrieves current sources, constructs the creativ
 
 The [prompt reference](prompt-reference/README.md) supplies exact effective Real `execution_v3` instructions, output schemas, context projections, image serializers and synthetic traces. It distinguishes inspected code from live/deployed evidence. [Unitale migration requirements](prompt-reference/unitale-migration.md) move creative ownership into Dify and all application communication through Manager.
 
+Start Unitale implementation with the [staging runbook and copyable handoff prompt](prompt-reference/staging-runbook.md). It connects the design reference to source access, reproducible control tooling, Unitale runtime prerequisites, adapter selection and staging publication. Installed Booklet plugins are not verified Unitale adapters.
+
 ```mermaid
 sequenceDiagram
   participant B as Booklet
