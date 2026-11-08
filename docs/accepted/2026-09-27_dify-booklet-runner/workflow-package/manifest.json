@@ -1,11 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "packageKind": "real_only_reference",
   "sourceHost": "https://dify.uniwares.co.uk",
   "workspaceId": "ffac910f-2786-490e-90d8-07243d49741b",
   "capturedAt": "2026-11-08T08:32:40.743Z",
-  "selectionPolicy": "Current published versions of the explicit 18-app Issue #65 suite; excludes earlier manager/tester variants and all control, transport, and recovery probes.",
+  "derivedAt": "2026-11-08T10:30:01.888Z",
+  "codeSourceCommit": "1d4cc02307edad21aadefc244bcc4e286396b88f",
+  "workflowSourceCommit": "1d4cc02307edad21aadefc244bcc4e286396b88f",
+  "selectionPolicy": "Exactly the original 18 Issue #65 app IDs. Derived from recorded publications; no live refresh.",
+  "transformationPolicy": "Retain start and the graph closure from real_identity; replace start mode routing with start -> real_identity; set required mode default to real. Retained node configuration is otherwise unchanged.",
   "checksumPolicy": "SHA-256; DSL hashes use exact UTF-8 file bytes. Graph/configuration hashes use compact JSON with recursively sorted object keys and preserved array order.",
-  "environmentComparison": "Secret values are empty; native export includes environment selector metadata absent from the publication API response. Comparison removes selector and empties secret values on both sides. Non-secret values and remaining declaration fields must match.",
+  "promptCatalogPath": "prompt-reference/catalog.json",
+  "promptCatalogSha256": "0de7a122e41ffc26a6f8e0027cbdf7396ec09b86294c19a2aabb30d487c16b4e",
   "workflows": [
     {
       "name": "issue65_m3_manager",
@@ -13,16 +19,118 @@
       "group": "Orchestration",
       "appId": "46572ccb-d954-45e5-b73d-90fd0995cdb6",
       "publishedWorkflowId": "be42392c-1fe1-4872-9139-86f14ae60a28",
-      "editorUrl": "https://dify.uniwares.co.uk/app/46572ccb-d954-45e5-b73d-90fd0995cdb6/workflow",
-      "capturedAt": "2026-11-08T08:21:03.749Z",
-      "publishedAt": "2026-10-31T10:56:57.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/46572ccb-d954-45e5-b73d-90fd0995cdb6/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:03.749Z",
+        "publishedAt": "2026-10-31T10:56:57.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "dbe8910236db63fb61acc6be32fccafb906f712e8601eb827b786989d62e7694",
+        "publishedGraphSha256": "3cca8b627ff2b03fafe456fc0b982bfb62b34be0f5975e73330675034f902658",
+        "publishedConfigurationSha256": "f755b0e3064923e873108afc0fdd373aece78d17b0f2ae3e46b31a489f6d865a",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_manager/README.md",
       "dslPath": "workflows/issue65_m3_manager/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_manager/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "dbe8910236db63fb61acc6be32fccafb906f712e8601eb827b786989d62e7694",
-      "publishedGraphSha256": "3cca8b627ff2b03fafe456fc0b982bfb62b34be0f5975e73330675034f902658",
-      "publishedConfigurationSha256": "f755b0e3064923e873108afc0fdd373aece78d17b0f2ae3e46b31a489f6d865a",
-      "captureMethod": "native_export",
+      "dslSha256": "3195ba9aacb95d402cbd36116d4caf184644a9cd84d46b89a3aa2a15193951e1",
+      "readmeSha256": "d8df7e09e35fa117ed0a03351806bf5361e78a3c0ca1b170dc2ef729e10982b7",
+      "promptsSha256": "ef7c167a55679c81920327fb01f2aa49bb357f89e4018e2ef6f428766a64c9d9",
+      "derivedGraphSha256": "d3d93492118bb93e1fcbb095e05e41fc671c7df9836a64944e8831c8ecaffa79",
+      "transformation": {
+        "retainedNodeIds": [
+          "real_authorize",
+          "real_authorized",
+          "real_decode",
+          "real_identity",
+          "real_llm",
+          "real_llm-finish",
+          "real_paused",
+          "start"
+        ],
+        "removedNodeIds": [
+          "ack",
+          "authorize",
+          "authorized",
+          "finish",
+          "identity",
+          "m4_authorize",
+          "m4_authorized",
+          "m4_decode",
+          "m4_identity",
+          "m4_llm",
+          "m4_llm-finish",
+          "m4_mode",
+          "m4_paused",
+          "paused",
+          "real_mode",
+          "save",
+          "simulate"
+        ],
+        "removedEdgeIds": [
+          "ack-finish",
+          "authorize-simulate",
+          "authorized-paused",
+          "authorized-save",
+          "identity-authorize",
+          "m4_authorize-m4_decode",
+          "m4_authorized-m4_llm",
+          "m4_authorized-m4_paused",
+          "m4_decode-m4_authorized",
+          "m4_identity-m4_authorize",
+          "m4_llm-m4_llm-finish",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "real_mode-m4_mode",
+          "real_mode-real_identity",
+          "save-ack",
+          "simulate-authorized",
+          "start-real_mode"
+        ],
+        "addedEdge": {
+          "data": {
+            "isInIteration": false,
+            "isInLoop": false,
+            "iteration_id": null,
+            "loop_id": null,
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom",
+          "zIndex": 0
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -31,23 +139,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "4919c78815ca10a88cd8d0d0820e1dbc10b041cc13fed9c3b896f32d0f6046a4"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m1_J01",
@@ -55,16 +155,113 @@
       "group": "Narrative",
       "appId": "7c186b42-a069-4059-aac6-5589e870951f",
       "publishedWorkflowId": "9b172681-6845-4803-9194-6f5f5c1984dd",
-      "editorUrl": "https://dify.uniwares.co.uk/app/7c186b42-a069-4059-aac6-5589e870951f/workflow",
-      "capturedAt": "2026-11-08T08:21:09.685Z",
-      "publishedAt": "2026-10-28T10:42:58.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/7c186b42-a069-4059-aac6-5589e870951f/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:09.685Z",
+        "publishedAt": "2026-10-28T10:42:58.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "672add46a789199c82c6b48c2ca0a13ea1da9442a7148d8518ca6c89b8e7072f",
+        "publishedGraphSha256": "b8d69b89e4f992e0b4a60eddd6f10be61d083f14455b8a5cf5b5a1e47f80b4be",
+        "publishedConfigurationSha256": "337f395ad52385f6410e6f8892ba61ab6c9302d5981e9fe8a90167ce0350ae1d",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m1_J01/README.md",
       "dslPath": "workflows/issue65_m1_J01/workflow.yml",
+      "promptsPath": "workflows/issue65_m1_J01/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "672add46a789199c82c6b48c2ca0a13ea1da9442a7148d8518ca6c89b8e7072f",
-      "publishedGraphSha256": "b8d69b89e4f992e0b4a60eddd6f10be61d083f14455b8a5cf5b5a1e47f80b4be",
-      "publishedConfigurationSha256": "337f395ad52385f6410e6f8892ba61ab6c9302d5981e9fe8a90167ce0350ae1d",
-      "captureMethod": "native_export",
+      "dslSha256": "857b35ef492df3222969de8aad1b4cae13fac0c53d7a8f08525280f6d8e32b3b",
+      "readmeSha256": "f3dcf3c481173bd7d0f20e8b16aba57f9430a29f340f5881654e5f877a08ebe1",
+      "promptsSha256": "8fa7c97bf5a1570e957851580dff78ca8d2fac53285e138d1fe3caa327a2324f",
+      "derivedGraphSha256": "37bf75a5e9c8c5642187934dc3ff8d313c1d0194b030c4f7f9b794481622602c",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -73,23 +270,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "f95ce476b6ad79f27766be5b25afeb53a4ec8e25987d168710f6e76f442f4f2e"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m1_J02",
@@ -97,16 +286,113 @@
       "group": "Narrative",
       "appId": "4b49ed43-218d-4892-981f-acfe7181c60c",
       "publishedWorkflowId": "118598e8-a13c-46fb-b8f9-ab28ff64ca02",
-      "editorUrl": "https://dify.uniwares.co.uk/app/4b49ed43-218d-4892-981f-acfe7181c60c/workflow",
-      "capturedAt": "2026-11-08T08:21:14.966Z",
-      "publishedAt": "2026-10-28T10:47:37.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/4b49ed43-218d-4892-981f-acfe7181c60c/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:14.966Z",
+        "publishedAt": "2026-10-28T10:47:37.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "a6bd1bb1ebd823df1bf09052e491fb3f02a4762e7e3cc5539b0cd99adcc710cf",
+        "publishedGraphSha256": "966b7f92bd8e9b5d93aeb0707b19e65e686f70d6809bc3b311b03e7a3c6338e1",
+        "publishedConfigurationSha256": "a0420d82c2e398944c0697c52057228a820fc0c5d5710049ce7fe4f71b207bf6",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m1_J02/README.md",
       "dslPath": "workflows/issue65_m1_J02/workflow.yml",
+      "promptsPath": "workflows/issue65_m1_J02/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "a6bd1bb1ebd823df1bf09052e491fb3f02a4762e7e3cc5539b0cd99adcc710cf",
-      "publishedGraphSha256": "966b7f92bd8e9b5d93aeb0707b19e65e686f70d6809bc3b311b03e7a3c6338e1",
-      "publishedConfigurationSha256": "a0420d82c2e398944c0697c52057228a820fc0c5d5710049ce7fe4f71b207bf6",
-      "captureMethod": "native_export",
+      "dslSha256": "62a163b323179df43b303d833bab5a842bd4ef1a308e9952b7c8f1bb73989cf8",
+      "readmeSha256": "4f3e064fce6e53440b1c366160d13ba56b3c20bbfe56678f9eb2b40c7da61e68",
+      "promptsSha256": "fe2deebeac8a834e18c41c09a020cac1ab5aed10102257865ba08e81ff8838bc",
+      "derivedGraphSha256": "ed2bb02d247b9d8ec42baebd55722452684b5fb963bbd34e07124bf203194023",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -115,23 +401,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "2bb50f658f928fa698e4d00a46c4b76fc718b9c6c3e45d8d7834871affdd755b"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J03",
@@ -139,16 +417,113 @@
       "group": "Narrative",
       "appId": "9f9b7ce0-1753-4999-87e0-290dcd47b46a",
       "publishedWorkflowId": "888e9f60-0f72-4100-b8c4-588f0b6788dd",
-      "editorUrl": "https://dify.uniwares.co.uk/app/9f9b7ce0-1753-4999-87e0-290dcd47b46a/workflow",
-      "capturedAt": "2026-11-08T08:21:20.382Z",
-      "publishedAt": "2026-10-28T10:47:52.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/9f9b7ce0-1753-4999-87e0-290dcd47b46a/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:20.382Z",
+        "publishedAt": "2026-10-28T10:47:52.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "d1f2e8054400175c45b115d961520e69f101b59a602ea3481392088fa80d161c",
+        "publishedGraphSha256": "815272d00e0741506879c33113b2c45abb93c56ce60cc688a21977f4a7748811",
+        "publishedConfigurationSha256": "434c151778baf90aa6f554417aaa689b382ec0fd4dac0fc9effbc3b40a031172",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J03/README.md",
       "dslPath": "workflows/issue65_m2_J03/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J03/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "d1f2e8054400175c45b115d961520e69f101b59a602ea3481392088fa80d161c",
-      "publishedGraphSha256": "815272d00e0741506879c33113b2c45abb93c56ce60cc688a21977f4a7748811",
-      "publishedConfigurationSha256": "434c151778baf90aa6f554417aaa689b382ec0fd4dac0fc9effbc3b40a031172",
-      "captureMethod": "native_export",
+      "dslSha256": "21285fb63b275596b3c28f516a37ef416159d85217f657f7fe0d9ad7ebab919a",
+      "readmeSha256": "08fd2daf5d40883830d2938253995bcc8cdd23991f8f7afa90467caa811d8405",
+      "promptsSha256": "8143a90f2d5dc38e87de07b525c2bd2f5378dfd10891b3fdb3eb7b14d0abd64b",
+      "derivedGraphSha256": "226b1f954f22facd363b1ed436e9445cb187c5d7c0a01889144c35409d14de96",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -157,23 +532,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "f707e60e0cefa227b13cbb58a12f6ce98ea2817fe83aa0aeb280e398d8c1d48f"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J04",
@@ -181,16 +548,113 @@
       "group": "Narrative",
       "appId": "98bb1b3f-d287-4f5b-a764-b47b30c314af",
       "publishedWorkflowId": "76601b9a-2e9b-4a08-b027-60673538e9b1",
-      "editorUrl": "https://dify.uniwares.co.uk/app/98bb1b3f-d287-4f5b-a764-b47b30c314af/workflow",
-      "capturedAt": "2026-11-08T08:21:26.475Z",
-      "publishedAt": "2026-10-28T10:48:08.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/98bb1b3f-d287-4f5b-a764-b47b30c314af/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:26.475Z",
+        "publishedAt": "2026-10-28T10:48:08.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "3e84212891eb76da2d4006a6d94ff2a4c11b46eaa7761c449ea30c2fe0e63aa5",
+        "publishedGraphSha256": "34b5344070b5b29d1bf63c57e5335a2b449fcb5b67201220a254de74ba80ba96",
+        "publishedConfigurationSha256": "660b43ca106e40e5c971d6c333ca14252221a862378d93271b52d1c0deee5c41",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J04/README.md",
       "dslPath": "workflows/issue65_m2_J04/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J04/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "3e84212891eb76da2d4006a6d94ff2a4c11b46eaa7761c449ea30c2fe0e63aa5",
-      "publishedGraphSha256": "34b5344070b5b29d1bf63c57e5335a2b449fcb5b67201220a254de74ba80ba96",
-      "publishedConfigurationSha256": "660b43ca106e40e5c971d6c333ca14252221a862378d93271b52d1c0deee5c41",
-      "captureMethod": "native_export",
+      "dslSha256": "54a7444b510288942b7160557acc6b698c9254b6e58e72fe5fa4e648c556c358",
+      "readmeSha256": "7aeafb310d0f59f146af8dc722299df83547c14a049cf506c32d247806b0066f",
+      "promptsSha256": "454ff4b777e7eca0d40e2f1512a8a6d1ec25278b7694628826db435b604ef5b8",
+      "derivedGraphSha256": "21cb280b27ed991fcfadfc6c72f380aa555fc37898642ad4fbbd564ff8abca24",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -199,23 +663,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "cee140807b90ea03fc75df3261fb2fc4d91d4dee66173b57987463c9497ce987"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J05",
@@ -223,16 +679,113 @@
       "group": "Narrative",
       "appId": "4c7aff37-66fd-4dd5-a6a0-246001fd8d27",
       "publishedWorkflowId": "ccd977e9-79d4-4f4c-aa19-4d5aa366ed5d",
-      "editorUrl": "https://dify.uniwares.co.uk/app/4c7aff37-66fd-4dd5-a6a0-246001fd8d27/workflow",
-      "capturedAt": "2026-11-08T08:21:31.977Z",
-      "publishedAt": "2026-10-28T10:48:29.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/4c7aff37-66fd-4dd5-a6a0-246001fd8d27/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:31.977Z",
+        "publishedAt": "2026-10-28T10:48:29.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "39622bb4a348addd1979479f1086f12316a90a52918714a36a389316fc680096",
+        "publishedGraphSha256": "ac482c4254c13eb66644c388112e42435b01d2bd50d751cab7a21bff069dc829",
+        "publishedConfigurationSha256": "359070910832dfd5f2197102650e6df63052a435cd1f2c86f5ea191f58aed151",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J05/README.md",
       "dslPath": "workflows/issue65_m2_J05/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J05/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "39622bb4a348addd1979479f1086f12316a90a52918714a36a389316fc680096",
-      "publishedGraphSha256": "ac482c4254c13eb66644c388112e42435b01d2bd50d751cab7a21bff069dc829",
-      "publishedConfigurationSha256": "359070910832dfd5f2197102650e6df63052a435cd1f2c86f5ea191f58aed151",
-      "captureMethod": "native_export",
+      "dslSha256": "e8e4e706ec63fbe663c97592120f0b2d6f54bd208c03334d9041dfc7d0aa3647",
+      "readmeSha256": "a731177db5535eeaf7e18c9f42eabdefe2a0a6a607c65654a80526364be27719",
+      "promptsSha256": "abf8be8646647b84d308b06f793dca069f29d57f610c013705b661577b20587e",
+      "derivedGraphSha256": "f036cd8a5321ab8e0089fd6bc6b0dfa1d413d4571b133358dd130b2b4449ef81",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -241,23 +794,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "623648e9186320b837a38e19d11de884638f664a8a73453489d6dbbb6af8bfac"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J06",
@@ -265,16 +810,113 @@
       "group": "Narrative",
       "appId": "fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe",
       "publishedWorkflowId": "0d09f187-34cb-4f30-9377-ad4cf233c822",
-      "editorUrl": "https://dify.uniwares.co.uk/app/fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe/workflow",
-      "capturedAt": "2026-11-08T08:21:37.289Z",
-      "publishedAt": "2026-10-28T10:48:54.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:37.289Z",
+        "publishedAt": "2026-10-28T10:48:54.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "273ce1f5881d6f1329047be05c3be92b8f21fa634e3dd0cc03f8fd76d63ca0ff",
+        "publishedGraphSha256": "905640f1a066c60d4e7e795753e9d70f80c16ad67ec1ca84b56280e3a2c3caca",
+        "publishedConfigurationSha256": "c091643d8f9cde7b7d0abc02e523ca255b42a108c465e4abeca0587c27f7bd97",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J06/README.md",
       "dslPath": "workflows/issue65_m2_J06/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J06/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "273ce1f5881d6f1329047be05c3be92b8f21fa634e3dd0cc03f8fd76d63ca0ff",
-      "publishedGraphSha256": "905640f1a066c60d4e7e795753e9d70f80c16ad67ec1ca84b56280e3a2c3caca",
-      "publishedConfigurationSha256": "c091643d8f9cde7b7d0abc02e523ca255b42a108c465e4abeca0587c27f7bd97",
-      "captureMethod": "native_export",
+      "dslSha256": "f67c023a57b08f5132d389efeeced508ce8c6114e0504d85572454ce2a439950",
+      "readmeSha256": "8f146e76af84611c0fc118f2bde7a465fb12b5a7f93e71fda1cd2ed5da8e34af",
+      "promptsSha256": "aedb16ab23c6c1046efd0bf1aed0c34ce0748a5af4ba547574628906abbcb6f2",
+      "derivedGraphSha256": "13692f9dce6e4d694131eab3a60fb8c6c7fd3bc0e60447275d6c2c6390ddd148",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -283,23 +925,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "f39b3aac037b57de4fb8b85082543fe9c3d34a485310c99e22dff5e5b2b06471"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J07",
@@ -307,16 +941,113 @@
       "group": "Narrative",
       "appId": "dafefca5-4155-465b-9cdf-6bb041ac0d99",
       "publishedWorkflowId": "8246398b-4e62-4da5-8ce0-75bf911e4a17",
-      "editorUrl": "https://dify.uniwares.co.uk/app/dafefca5-4155-465b-9cdf-6bb041ac0d99/workflow",
-      "capturedAt": "2026-11-08T08:21:42.742Z",
-      "publishedAt": "2026-10-28T10:49:23.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/dafefca5-4155-465b-9cdf-6bb041ac0d99/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:42.742Z",
+        "publishedAt": "2026-10-28T10:49:23.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "c5fde12c8c17e05bda9f77e0d1032ed1e979d29f2fdcc894cd0d042985d5ef43",
+        "publishedGraphSha256": "1bbd7b2fa176b86dca4ddd8578341b0b06b3cd856ea0a64b9bcf54aadd870ed9",
+        "publishedConfigurationSha256": "fbe31e1b9c9cdcea277a6daba9dafcdbf8b578c18fc2997227f0d6aea679f6a4",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J07/README.md",
       "dslPath": "workflows/issue65_m2_J07/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J07/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "c5fde12c8c17e05bda9f77e0d1032ed1e979d29f2fdcc894cd0d042985d5ef43",
-      "publishedGraphSha256": "1bbd7b2fa176b86dca4ddd8578341b0b06b3cd856ea0a64b9bcf54aadd870ed9",
-      "publishedConfigurationSha256": "fbe31e1b9c9cdcea277a6daba9dafcdbf8b578c18fc2997227f0d6aea679f6a4",
-      "captureMethod": "native_export",
+      "dslSha256": "25bf9ac518ee7d9459f73f66374db035a35c25c9e6b2d12c670e830a51e019b1",
+      "readmeSha256": "ee275d0112bf58a276de4afbddabc8bbce65936b83e2c60abe99116a88788a6f",
+      "promptsSha256": "01d5d2645d49d11348ef0781bb766c7642cf6eeaf80e8e2b76de6fe4bf9f0fcf",
+      "derivedGraphSha256": "dac946d93e6252e433521f2f7ccbeb3935f7fa1ad4fe687b009e6903ae1f4c18",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -325,23 +1056,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "6ac4cd2ad2e1b7df8aab757f62b959b308796ed55ef9a642c765ada2ade8662a"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J08",
@@ -349,16 +1072,113 @@
       "group": "Visual/page planning",
       "appId": "0fc8f253-1ae6-4103-a105-4f737ce995d6",
       "publishedWorkflowId": "2943c9ab-d570-4595-9021-91572edf1341",
-      "editorUrl": "https://dify.uniwares.co.uk/app/0fc8f253-1ae6-4103-a105-4f737ce995d6/workflow",
-      "capturedAt": "2026-11-08T08:21:48.017Z",
-      "publishedAt": "2026-10-28T10:49:40.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/0fc8f253-1ae6-4103-a105-4f737ce995d6/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:48.017Z",
+        "publishedAt": "2026-10-28T10:49:40.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "eeb3c9bd0fc0e105a1058e69d2809b56d573a28ef717655da0f86a5534568067",
+        "publishedGraphSha256": "5bc63a4cad878283dbb7473f514443c11ed0c1668ff3ab3d075b036a4b19fa53",
+        "publishedConfigurationSha256": "7b6d8281bebb800aa192246c99ecc77e67a27dede6336ab3079ea17b33016d6f",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J08/README.md",
       "dslPath": "workflows/issue65_m2_J08/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J08/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "eeb3c9bd0fc0e105a1058e69d2809b56d573a28ef717655da0f86a5534568067",
-      "publishedGraphSha256": "5bc63a4cad878283dbb7473f514443c11ed0c1668ff3ab3d075b036a4b19fa53",
-      "publishedConfigurationSha256": "7b6d8281bebb800aa192246c99ecc77e67a27dede6336ab3079ea17b33016d6f",
-      "captureMethod": "native_export",
+      "dslSha256": "02c28b55462b1e90d2778705b78eb2904b9611665c35a935856f8c1c17d841d7",
+      "readmeSha256": "dcc7140b492fac502b32f9ffeb370f2fdd67e9a074feffffea497d3bb87dfb11",
+      "promptsSha256": "59c857ea0e4ad06d763483cff5f5e553ae9d52eb5741b835bc2e220ff3685e3e",
+      "derivedGraphSha256": "880519d11708fef64bb6850675870d76658056a2a0a8049aa5efcead0635ec3a",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -367,23 +1187,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "fbf379eab43d794ad7489ce9dc6412c7e45049100dfa28873ced35a106365d9c"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J09",
@@ -391,16 +1203,113 @@
       "group": "Visual/page planning",
       "appId": "fed00cde-73e7-4881-b818-6b2ab5cfabdb",
       "publishedWorkflowId": "410c30c1-9834-434e-ace1-25573732adc6",
-      "editorUrl": "https://dify.uniwares.co.uk/app/fed00cde-73e7-4881-b818-6b2ab5cfabdb/workflow",
-      "capturedAt": "2026-11-08T08:21:53.202Z",
-      "publishedAt": "2026-10-28T10:50:01.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/fed00cde-73e7-4881-b818-6b2ab5cfabdb/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:53.202Z",
+        "publishedAt": "2026-10-28T10:50:01.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "f739efbe55477b515fa7791b251cf3972b5367407258a0270b4aae5f2a84b1f5",
+        "publishedGraphSha256": "f3a6c9ea1219aa8d7b7e0fa62810e7ebdca83fd720f0b6488ca8407b8e9e25bf",
+        "publishedConfigurationSha256": "b6a15c4942af57316e3a905b8e519334613314b68c7684649292d2637b261a33",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J09/README.md",
       "dslPath": "workflows/issue65_m2_J09/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J09/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "f739efbe55477b515fa7791b251cf3972b5367407258a0270b4aae5f2a84b1f5",
-      "publishedGraphSha256": "f3a6c9ea1219aa8d7b7e0fa62810e7ebdca83fd720f0b6488ca8407b8e9e25bf",
-      "publishedConfigurationSha256": "b6a15c4942af57316e3a905b8e519334613314b68c7684649292d2637b261a33",
-      "captureMethod": "native_export",
+      "dslSha256": "d2159947da55eac4e67dd3ca5bb38c935170f682fbd4ddc007029a4d1bbed145",
+      "readmeSha256": "0638f1634ccdd5de6e26462320936ca6bb3918cd6c7be4caf21e8e4f674fdf6a",
+      "promptsSha256": "012bbb6ea4b91b2fe2e5fcaf2d355c2ce852f4d49f45e52edadba973cd6c9cea",
+      "derivedGraphSha256": "0db503aaa5631924de3e0e9a5e67f2d3a5c1c5a3a2280cf8370e6deb38db94e4",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -409,23 +1318,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "2029cca9ba48e62a3e523970eb750273cbb844e2d4da0e2b846b6234ae85732e"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_J10",
@@ -433,16 +1334,113 @@
       "group": "Visual/page planning",
       "appId": "bf6a5e06-3168-4e81-a02a-c4b8eb4c8066",
       "publishedWorkflowId": "1415a16e-be40-4c70-a355-0affa27644bb",
-      "editorUrl": "https://dify.uniwares.co.uk/app/bf6a5e06-3168-4e81-a02a-c4b8eb4c8066/workflow",
-      "capturedAt": "2026-11-08T08:21:59.937Z",
-      "publishedAt": "2026-10-28T10:50:23.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/bf6a5e06-3168-4e81-a02a-c4b8eb4c8066/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:21:59.937Z",
+        "publishedAt": "2026-10-28T10:50:23.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "b0f023a6ebae393fe536cc55506dcb1bdf7c07aab1f30ba0f3254b221b66ee5d",
+        "publishedGraphSha256": "2507812e7aa967f829763b38b23a38fa1b450ec6d99c4d2f8a1936bff8c3bd8a",
+        "publishedConfigurationSha256": "47d2a65406b947c38659e54220401dcd3bda80150d0c697864a70281f01c5979",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_J10/README.md",
       "dslPath": "workflows/issue65_m2_J10/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_J10/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "b0f023a6ebae393fe536cc55506dcb1bdf7c07aab1f30ba0f3254b221b66ee5d",
-      "publishedGraphSha256": "2507812e7aa967f829763b38b23a38fa1b450ec6d99c4d2f8a1936bff8c3bd8a",
-      "publishedConfigurationSha256": "47d2a65406b947c38659e54220401dcd3bda80150d0c697864a70281f01c5979",
-      "captureMethod": "native_export",
+      "dslSha256": "a66e0a4632b37d287fd667384321b381e48f0f66282783fc1cf683cd3aa7c8e3",
+      "readmeSha256": "8aae29cb20e04d5fdc4bdd766be38194af7f954d16df7fbcf8899ac4b3ade45e",
+      "promptsSha256": "c3f43830b18ddbac32e0691d6bcec18a390d30c6e4c20809bba4ed53a6794f77",
+      "derivedGraphSha256": "b640fb52237c08edf457f622576c935cf22a37ad9c7851ddbe98a364725d1090",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -451,23 +1449,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "9ccd5f0977ddad8e8227f117e03fe17e678a00ffe96d695b5addb33eeb25284f"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_J11",
@@ -475,16 +1465,113 @@
       "group": "Visual/page planning",
       "appId": "4f4704ca-de02-4a6d-8051-ba6849fdda56",
       "publishedWorkflowId": "13a875ee-551e-43ef-9501-72ea60f21542",
-      "editorUrl": "https://dify.uniwares.co.uk/app/4f4704ca-de02-4a6d-8051-ba6849fdda56/workflow",
-      "capturedAt": "2026-11-08T08:22:05.639Z",
-      "publishedAt": "2026-10-28T10:52:53.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/4f4704ca-de02-4a6d-8051-ba6849fdda56/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:05.639Z",
+        "publishedAt": "2026-10-28T10:52:53.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "8f83c5a604087205b8e9df8e1872b3d54c542ad80d46e42fddf046dea9931ed6",
+        "publishedGraphSha256": "a4ab875d648d1cb572880b53cdd24b7dea8631462b5de7bb57713bfc8bb873d6",
+        "publishedConfigurationSha256": "fad4b264ca0efbe50b22068caa83bc71d2de66d68909963bbf6ad62d4f06332b",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_J11/README.md",
       "dslPath": "workflows/issue65_m3_J11/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_J11/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "8f83c5a604087205b8e9df8e1872b3d54c542ad80d46e42fddf046dea9931ed6",
-      "publishedGraphSha256": "a4ab875d648d1cb572880b53cdd24b7dea8631462b5de7bb57713bfc8bb873d6",
-      "publishedConfigurationSha256": "fad4b264ca0efbe50b22068caa83bc71d2de66d68909963bbf6ad62d4f06332b",
-      "captureMethod": "native_export",
+      "dslSha256": "c157e56f4f684bcca02550986c2f91e48ff702d9012f5d13172215507c471a10",
+      "readmeSha256": "27b7f3f25b2048921f1f95fa91b5ad0b598b75e43e74a886774120a5d6942cf4",
+      "promptsSha256": "2a4c717cf21d408a0050ce129f69d1385afd73acdca61a168f7c04b9d6b60950",
+      "derivedGraphSha256": "5b10e776231dbab544d18b2c5a9c471824a83adb3938fb9a95a25b4bdff5a011",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -493,23 +1580,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "867a5de321167d7edae08933db0c36517c9549ffa4c00ac84abde8c635133797"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_J12",
@@ -517,16 +1596,113 @@
       "group": "Visual/page planning",
       "appId": "f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1",
       "publishedWorkflowId": "17f95a69-4393-4001-902d-947ccc55672c",
-      "editorUrl": "https://dify.uniwares.co.uk/app/f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1/workflow",
-      "capturedAt": "2026-11-08T08:22:10.835Z",
-      "publishedAt": "2026-10-28T10:53:11.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:10.835Z",
+        "publishedAt": "2026-10-28T10:53:11.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "1c8a16d82db07fd8fd1450158a05025deebb48c45a3c3f00a4d94900d800900f",
+        "publishedGraphSha256": "16a97a40d18c8ca6d9b6312a1d3f0803add1f4bc72d20250ab9de84cf8472d0d",
+        "publishedConfigurationSha256": "24030df0578d1bbf82ff34804f0f031d327685d9148eca5615dadcb56f23e14a",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_J12/README.md",
       "dslPath": "workflows/issue65_m3_J12/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_J12/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "1c8a16d82db07fd8fd1450158a05025deebb48c45a3c3f00a4d94900d800900f",
-      "publishedGraphSha256": "16a97a40d18c8ca6d9b6312a1d3f0803add1f4bc72d20250ab9de84cf8472d0d",
-      "publishedConfigurationSha256": "24030df0578d1bbf82ff34804f0f031d327685d9148eca5615dadcb56f23e14a",
-      "captureMethod": "native_export",
+      "dslSha256": "c547a03cdb30cc6afaea7edfa7aad9c19f5d07932331265c7937f1e001a4e06f",
+      "readmeSha256": "01c94d86711274f32a5363d82d5bd24142f85159298a975f31c3a6a6a816d9e6",
+      "promptsSha256": "4161963bf00977a9353e9aa68ae26ea52b92178ce9d9cb34e997820dce4cfb77",
+      "derivedGraphSha256": "430ea85968ec88fc6af7ae523592c3dfd8e90725da58b356bf1899e183458f45",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_llm",
+          "real_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_llm",
+          "m4_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_llm",
+          "m4_llm-m4_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -535,23 +1711,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "18a947c3a3d47ad1f3a5c6eb9152e1e0fcbde3df58ca3482da378519ffeb2e4d"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m2_image_probe",
@@ -559,16 +1727,140 @@
       "group": "Image execution",
       "appId": "923566e9-c6fd-4936-836f-b21704d39628",
       "publishedWorkflowId": "d016b1e3-93a6-4e9b-8509-de2a9b3568ad",
-      "editorUrl": "https://dify.uniwares.co.uk/app/923566e9-c6fd-4936-836f-b21704d39628/workflow",
-      "capturedAt": "2026-11-08T08:22:16.438Z",
-      "publishedAt": "2026-11-01T13:18:09.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/923566e9-c6fd-4936-836f-b21704d39628/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:16.438Z",
+        "publishedAt": "2026-11-01T13:18:09.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "f6914b69c4ec67804689b628350347ba8853f235859fbbdfc465d567bd62b523",
+        "publishedGraphSha256": "99079d128330c5f6a13d0811ddaec1206a329215707a3ff793026bb159b70901",
+        "publishedConfigurationSha256": "13133cc270ff6c10fd9c34349bfbad94de9bd1530750f65ec412bf1d6c54dc20",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 2,
+            "issues": [
+              {
+                "level": "warning",
+                "code": "UNKNOWN_NODE_TYPE",
+                "message": "node 'select_file' type 'list-operator' not recognized; skipped per-type checks",
+                "nodeId": "select_file"
+              },
+              {
+                "level": "warning",
+                "code": "UNKNOWN_NODE_TYPE",
+                "message": "node 'm4_image_select_file' type 'list-operator' not recognized; skipped per-type checks",
+                "nodeId": "m4_image_select_file"
+              }
+            ],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 0,
+              "tool": 1,
+              "http-request": 3
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m2_image_probe/README.md",
       "dslPath": "workflows/issue65_m2_image_probe/workflow.yml",
+      "promptsPath": "workflows/issue65_m2_image_probe/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "f6914b69c4ec67804689b628350347ba8853f235859fbbdfc465d567bd62b523",
-      "publishedGraphSha256": "99079d128330c5f6a13d0811ddaec1206a329215707a3ff793026bb159b70901",
-      "publishedConfigurationSha256": "13133cc270ff6c10fd9c34349bfbad94de9bd1530750f65ec412bf1d6c54dc20",
-      "captureMethod": "native_export",
+      "dslSha256": "f460e0389489bd82781e4e9391363bd5ac5f8cfeca305bc405d60d8593eac1f0",
+      "readmeSha256": "0a9c76d8acafb2927a80bc5b38544a2f8f613ecaba40ecf12614971cc5fce93b",
+      "promptsSha256": "0cbd818b82a121f8cb45757161de69489d9cc3ea535981850fb5ee065282471b",
+      "derivedGraphSha256": "612efd57296c4eb8dcf3a891035e084fae19a7368b11f17b4b68645f1754f73c",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_image_tool",
+          "real_image_result",
+          "real_image_finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "prepare",
+          "authorized",
+          "fixture",
+          "select_file",
+          "upload",
+          "ack",
+          "finish",
+          "paused",
+          "m4_image_mode",
+          "m4_image_identity",
+          "m4_image_authorize",
+          "m4_image_prepare",
+          "m4_image_authorized",
+          "m4_image_fixture",
+          "m4_image_select_file",
+          "m4_image_upload",
+          "m4_image_ack",
+          "m4_image_finish",
+          "m4_image_paused",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-prepare",
+          "prepare-authorized",
+          "authorized-fixture",
+          "authorized-paused",
+          "fixture-select_file",
+          "select_file-upload",
+          "upload-ack",
+          "ack-finish",
+          "m4_image_identity-authorize",
+          "m4_image_authorize-prepare",
+          "m4_image_prepare-authorized",
+          "m4_image_authorized-fixture",
+          "m4_image_authorized-paused",
+          "m4_image_fixture-select_file",
+          "m4_image_select_file-upload",
+          "m4_image_upload-ack",
+          "m4_image_ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_image_mode",
+          "m4_image_mode-identity",
+          "m4_image_mode-m4_image_identity"
+        ],
+        "addedEdge": {
+          "data": {
+            "isInIteration": false,
+            "isInLoop": false,
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom",
+          "zIndex": 0
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05"
       ],
@@ -577,36 +1869,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 2,
-          "issues": [
-            {
-              "level": "warning",
-              "code": "UNKNOWN_NODE_TYPE",
-              "message": "node 'select_file' type 'list-operator' not recognized; skipped per-type checks",
-              "nodeId": "select_file"
-            },
-            {
-              "level": "warning",
-              "code": "UNKNOWN_NODE_TYPE",
-              "message": "node 'm4_image_select_file' type 'list-operator' not recognized; skipped per-type checks",
-              "nodeId": "m4_image_select_file"
-            }
-          ],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 0,
-            "tool": 1,
-            "http-request": 3
-          }
+          "issues": [],
+          "nodeCount": 9,
+          "edgeCount": 8
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "c320b77ec22371763a64730958b9673317af4079b6b4f315d0cd2f64b13db336"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_playful_kid",
@@ -614,16 +1885,127 @@
       "group": "Evaluation",
       "appId": "bf57a8ea-1be6-4a97-a5c0-023cfde794f8",
       "publishedWorkflowId": "4d295741-f1e5-4d2d-ac22-5f1243d703b9",
-      "editorUrl": "https://dify.uniwares.co.uk/app/bf57a8ea-1be6-4a97-a5c0-023cfde794f8/workflow",
-      "capturedAt": "2026-11-08T08:22:21.660Z",
-      "publishedAt": "2026-10-31T16:35:54.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/bf57a8ea-1be6-4a97-a5c0-023cfde794f8/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:21.660Z",
+        "publishedAt": "2026-10-31T16:35:54.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "aa1e8d4d717042a04a1942e81ab4055c257e378e129e128eaa8434d5bc7db701",
+        "publishedGraphSha256": "a08f3898309bf3bbd554f6eee673be4f05eaa4e338d181d5e26a8a24b4ba7966",
+        "publishedConfigurationSha256": "e282c0c04004f7e7d96c469ba17641454d03d129fd368c1c8c89f9b86e751fd2",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_playful_kid/README.md",
       "dslPath": "workflows/issue65_m3_playful_kid/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_playful_kid/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "aa1e8d4d717042a04a1942e81ab4055c257e378e129e128eaa8434d5bc7db701",
-      "publishedGraphSha256": "a08f3898309bf3bbd554f6eee673be4f05eaa4e338d181d5e26a8a24b4ba7966",
-      "publishedConfigurationSha256": "e282c0c04004f7e7d96c469ba17641454d03d129fd368c1c8c89f9b86e751fd2",
-      "captureMethod": "native_export",
+      "dslSha256": "9eed8999de12150ffc915c530fedfd63e3e5b7d73564d658cb25e9aa3535a771",
+      "readmeSha256": "55a49aa10d23b7aad6e21ba985036682200cca9381058683914311afd92636c7",
+      "promptsSha256": "d93e02036e274de7d44bd720bcaf8a6b93bc1b64d6e87e4f4188cb01a748fbcc",
+      "derivedGraphSha256": "345c1f290157e42f12430fd9149825ee714b5737b13857de5f4a00261d915406",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_report",
+          "real_llm",
+          "real_llm-finish",
+          "real_report_llm",
+          "real_report_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "report-kind",
+          "report-route",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_report",
+          "m4_llm",
+          "m4_llm-finish",
+          "m4_report_llm",
+          "m4_report_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-report-kind",
+          "report-kind-report-route",
+          "report-route-finish",
+          "report-route-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_report",
+          "m4_report-m4_llm",
+          "m4_llm-m4_llm-finish",
+          "m4_report-m4_report_llm",
+          "m4_report_llm-m4_report_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -632,23 +2014,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 11,
+          "edgeCount": 10
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "9f22be8c8b04ea709661340d1e33723e4b96d4a2cd8b925c1a1f0b6c1485d1a1"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_enthusiast_parent",
@@ -656,16 +2030,127 @@
       "group": "Evaluation",
       "appId": "593fb610-624e-404c-92de-57f54e9a47fb",
       "publishedWorkflowId": "c208d6c2-c88e-438b-849a-a9042b6834f5",
-      "editorUrl": "https://dify.uniwares.co.uk/app/593fb610-624e-404c-92de-57f54e9a47fb/workflow",
-      "capturedAt": "2026-11-08T08:22:27.072Z",
-      "publishedAt": "2026-10-31T16:36:51.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/593fb610-624e-404c-92de-57f54e9a47fb/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:27.072Z",
+        "publishedAt": "2026-10-31T16:36:51.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "906cfb8b23283f98dde41a1494117625b9627b9106ef10cebad7c6cfa78d41e4",
+        "publishedGraphSha256": "31e510c1933410f7776bb12cccbf5dbd522d5cd4c985889c9bcf9b343a222274",
+        "publishedConfigurationSha256": "7a8ea256b1102ace369014f82849138637f2b4521c176847884126423d61c999",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_enthusiast_parent/README.md",
       "dslPath": "workflows/issue65_m3_enthusiast_parent/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_enthusiast_parent/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "906cfb8b23283f98dde41a1494117625b9627b9106ef10cebad7c6cfa78d41e4",
-      "publishedGraphSha256": "31e510c1933410f7776bb12cccbf5dbd522d5cd4c985889c9bcf9b343a222274",
-      "publishedConfigurationSha256": "7a8ea256b1102ace369014f82849138637f2b4521c176847884126423d61c999",
-      "captureMethod": "native_export",
+      "dslSha256": "f128f08bc58a948b75dd645f0872c1408a55125e95059575eb08d0fef2d305cb",
+      "readmeSha256": "1fff1d0f99376f45744cab61a6b51cbfdac9e380f4e1deeac0599e71a7f418af",
+      "promptsSha256": "e79dd21bd003cd25660600acaa9ddb3a06cde29dcc42a01d080c06a038c256f4",
+      "derivedGraphSha256": "31df3a480d564faacedc95f2205aec5b36b3e5045e1359b58c41f216694e59b5",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_report",
+          "real_llm",
+          "real_llm-finish",
+          "real_report_llm",
+          "real_report_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "report-kind",
+          "report-route",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_report",
+          "m4_llm",
+          "m4_llm-finish",
+          "m4_report_llm",
+          "m4_report_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-report-kind",
+          "report-kind-report-route",
+          "report-route-finish",
+          "report-route-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_report",
+          "m4_report-m4_llm",
+          "m4_llm-m4_llm-finish",
+          "m4_report-m4_report_llm",
+          "m4_report_llm-m4_report_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -674,23 +2159,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 11,
+          "edgeCount": 10
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "fb04e5463048a888576f209d1103fdfbba4beab141eb62495a4ece041ffd50ac"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_professional_creator",
@@ -698,16 +2175,127 @@
       "group": "Evaluation",
       "appId": "cd284244-63d5-4169-95c3-9790001a5240",
       "publishedWorkflowId": "c2186c69-269e-48e5-972f-1a1b3a8bbb2f",
-      "editorUrl": "https://dify.uniwares.co.uk/app/cd284244-63d5-4169-95c3-9790001a5240/workflow",
-      "capturedAt": "2026-11-08T08:22:32.668Z",
-      "publishedAt": "2026-10-31T16:37:24.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/cd284244-63d5-4169-95c3-9790001a5240/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:32.668Z",
+        "publishedAt": "2026-10-31T16:37:24.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "80136d7a26130458ab583d3da7c3b6074a23ae1c1ca8effdbcf88d94063a3e4e",
+        "publishedGraphSha256": "dbee90fb836af2f29096fe47dcc319ac9edd6983711983fabae254bf6dfa5b28",
+        "publishedConfigurationSha256": "c0d6faf518e7353201be0e46f405ae56f59258475e9094132fb941eeab1e862e",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_professional_creator/README.md",
       "dslPath": "workflows/issue65_m3_professional_creator/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_professional_creator/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "80136d7a26130458ab583d3da7c3b6074a23ae1c1ca8effdbcf88d94063a3e4e",
-      "publishedGraphSha256": "dbee90fb836af2f29096fe47dcc319ac9edd6983711983fabae254bf6dfa5b28",
-      "publishedConfigurationSha256": "c0d6faf518e7353201be0e46f405ae56f59258475e9094132fb941eeab1e862e",
-      "captureMethod": "native_export",
+      "dslSha256": "1b8f7a7bc4fa407e4f39ec203fdaa486c447d19fced7a613a5da653a67785ab4",
+      "readmeSha256": "6dc55e545e740bbd29797a4e61a73d4acff7f329790d91d93bf33b21ccca49a5",
+      "promptsSha256": "6995639882104722dfa68bffbcce66fc3eafdd5e13fd49e9ac501379049d1482",
+      "derivedGraphSha256": "15a83119dfff00e9e0437c6f9333b8eb0b265f21ad6d4cbd7114e92c4f6cefbc",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_report",
+          "real_llm",
+          "real_llm-finish",
+          "real_report_llm",
+          "real_report_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "report-kind",
+          "report-route",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_report",
+          "m4_llm",
+          "m4_llm-finish",
+          "m4_report_llm",
+          "m4_report_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-report-kind",
+          "report-kind-report-route",
+          "report-route-finish",
+          "report-route-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_report",
+          "m4_report-m4_llm",
+          "m4_llm-m4_llm-finish",
+          "m4_report-m4_report_llm",
+          "m4_report_llm-m4_report_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -716,23 +2304,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 11,
+          "edgeCount": 10
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "e8aaaa58618dee35f0284714998f193e125939dc8e22621eb782072a211d11f7"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     },
     {
       "name": "issue65_m3_judge",
@@ -740,16 +2320,118 @@
       "group": "Evaluation",
       "appId": "89f1adcd-1073-460d-98a3-e4df35c4263c",
       "publishedWorkflowId": "de9614e4-dbb6-4286-9a15-43d570c963bc",
-      "editorUrl": "https://dify.uniwares.co.uk/app/89f1adcd-1073-460d-98a3-e4df35c4263c/workflow",
-      "capturedAt": "2026-11-08T08:22:37.892Z",
-      "publishedAt": "2026-10-31T16:37:37.000Z",
+      "sourceEditorUrl": "https://dify.uniwares.co.uk/app/89f1adcd-1073-460d-98a3-e4df35c4263c/workflow",
+      "source": {
+        "capturedAt": "2026-11-08T08:22:37.892Z",
+        "publishedAt": "2026-10-31T16:37:37.000Z",
+        "captureMethod": "native_export",
+        "dslSha256": "7c80c7eb09ead6a1b2d54695b2c6333699c9f941c6b4d9762f86f608db3adae9",
+        "publishedGraphSha256": "8ea0c7d4246911c47ea60f591a6be36c12c8ad1fc4d7d4a5661ba809ad14490a",
+        "publishedConfigurationSha256": "a6d0c5156d882741344383306beedb41ed5c8aecfa22ea916f28639dcb47f325",
+        "validation": {
+          "yamlParsing": "pass",
+          "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+          "graphChecks": {
+            "valid": true,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": [],
+            "localSelectors": "pass; node references and declared Start/Code outputs checked",
+            "reachability": "pass",
+            "maximumGraphPathInvocations": {
+              "llm": 1,
+              "tool": 0,
+              "http-request": 2
+            }
+          },
+          "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+        }
+      },
+      "derivedAt": "2026-11-08T10:30:01.888Z",
+      "captureMethod": "derived_real_only",
       "readmePath": "workflows/issue65_m3_judge/README.md",
       "dslPath": "workflows/issue65_m3_judge/workflow.yml",
+      "promptsPath": "workflows/issue65_m3_judge/prompts.md",
       "dslVersion": "0.7.0",
-      "dslSha256": "7c80c7eb09ead6a1b2d54695b2c6333699c9f941c6b4d9762f86f608db3adae9",
-      "publishedGraphSha256": "8ea0c7d4246911c47ea60f591a6be36c12c8ad1fc4d7d4a5661ba809ad14490a",
-      "publishedConfigurationSha256": "a6d0c5156d882741344383306beedb41ed5c8aecfa22ea916f28639dcb47f325",
-      "captureMethod": "native_export",
+      "dslSha256": "37361e29bec66af7f3ed27a488c31ba096dae3621be328a9ad2dffdf69805a03",
+      "readmeSha256": "a652e433dd269cfb1de42d9db82c36ae77eef3910e46f133cc87607b0dd29e7b",
+      "promptsSha256": "a487f34d6a39c6126104bd5caa09d9ed41c27673a0444bc37030d19adae46834",
+      "derivedGraphSha256": "6b7f8382a7218ae98d2797f5dbe7a6ba6dc0f634587c34e7141ea755d45ffa8a",
+      "transformation": {
+        "retainedNodeIds": [
+          "start",
+          "real_identity",
+          "real_authorize",
+          "real_decode",
+          "real_authorized",
+          "real_paused",
+          "real_report_llm",
+          "real_report_llm-finish"
+        ],
+        "removedNodeIds": [
+          "identity",
+          "authorize",
+          "simulate",
+          "authorized",
+          "save",
+          "ack",
+          "finish",
+          "paused",
+          "report-kind",
+          "report-route",
+          "m4_mode",
+          "m4_identity",
+          "m4_authorize",
+          "m4_decode",
+          "m4_authorized",
+          "m4_paused",
+          "m4_report_llm",
+          "m4_report_llm-finish",
+          "real_mode"
+        ],
+        "removedEdgeIds": [
+          "identity-authorize",
+          "authorize-simulate",
+          "simulate-authorized",
+          "authorized-report-kind",
+          "report-kind-report-route",
+          "report-route-finish",
+          "report-route-save",
+          "authorized-paused",
+          "save-ack",
+          "ack-finish",
+          "start-real_mode",
+          "real_mode-real_identity",
+          "real_mode-m4_mode",
+          "m4_mode-identity",
+          "m4_mode-m4_identity",
+          "m4_identity-m4_authorize",
+          "m4_authorize-m4_decode",
+          "m4_decode-m4_authorized",
+          "m4_authorized-m4_paused",
+          "m4_authorized-m4_report_llm",
+          "m4_report_llm-m4_report_llm-finish"
+        ],
+        "addedEdge": {
+          "data": {
+            "sourceType": "start",
+            "targetType": "if-else"
+          },
+          "id": "start-real_identity",
+          "source": "start",
+          "sourceHandle": "source",
+          "target": "real_identity",
+          "targetHandle": "target",
+          "type": "custom"
+        },
+        "changedFields": [
+          {
+            "path": "workflow.graph.nodes[id=start].data.variables[variable=mode].default",
+            "before": "",
+            "after": "real"
+          }
+        ]
+      },
       "pluginDependencies": [
         "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
       ],
@@ -758,51 +2440,15 @@
       ],
       "validation": {
         "yamlParsing": "pass",
-        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "retainedRealPathParity": "pass; retained nodes unchanged except Start mode default; original retained edges unchanged; one documented Start edge added",
         "graphChecks": {
           "valid": true,
-          "errorCount": 0,
-          "warningCount": 0,
           "issues": [],
-          "localSelectors": "pass; node references and declared Start/Code outputs checked",
-          "reachability": "pass",
-          "maximumGraphPathInvocations": {
-            "llm": 1,
-            "tool": 0,
-            "http-request": 2
-          }
+          "nodeCount": 8,
+          "edgeCount": 7
         },
-        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
-      },
-      "readmeSha256": "f7fee47cedde1bec42fae586a9d22a5aa24ef994c70bdae148e0abfa1207e0b2"
+        "documentationChecks": "pass; input/output/model/identity tables, effective prompt/schema extraction, source provenance and relative links verified; read-only review evidence is recorded in the publication PR"
+      }
     }
-  ],
-  "validation": {
-    "checkedAt": "2026-11-08T08:51:01.599Z",
-    "fileCount": 38,
-    "workflowCount": 18,
-    "relativeLinksChecked": 165,
-    "publicationParity": "pass for all 18; see environmentComparison",
-    "secretChecks": "pass; empty secret declarations, known source-secret exclusion, literal key/bearer/private-key scan",
-    "graphValidation": "18 valid, zero errors; image workflow has two disclosed UNKNOWN_NODE_TYPE warnings",
-    "runtimeExecution": "not performed",
-    "importCompatibility": "not tested"
-  },
-  "publicationRecheck": {
-    "checkedAt": "2026-11-08T08:51:01.600Z",
-    "result": "All 18 current publication IDs unchanged; fresh live publication graph and normalized configuration checksums match the packaged snapshots."
-  },
-  "independentReview": {
-    "status": "pass",
-    "completedAt": "2026-11-08T08:51:41.874Z",
-    "scope": "38 package files and generation-guide backlink; native DSL/provenance, factual claims, scope, secret declarations, links, checksums, and evidence limitations",
-    "result": "No blocking defects remain. Corrected the direction of the environment-selector metadata difference; all 18 README checksums and affected validation rechecked. Final manifest review evidence update covered by independent review."
-  },
-  "documentationReconciliation": {
-    "status": "pass",
-    "guideBacklink": "docs/dify-booklet-generation.md",
-    "runtimeImpact": "None; architecture, PRD, acceptance evidence, and credential inventory unchanged.",
-    "learningImpact": "Verified source provenance and snapshot refresh guidance are retained in the package; no new runtime lesson.",
-    "issueEvidence": "Post one non-closing evidence comment after the reviewed PR exists."
-  }
+  ]
 }
