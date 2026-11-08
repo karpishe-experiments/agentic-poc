@@ -1,0 +1,2120 @@
+app:
+  description: Issue65 M3-J12 model-free narrative module. Private bindings and live
+    acceptance remain separate.
+  icon: M
+  icon_background: '#E8F4FF'
+  icon_type: emoji
+  mode: workflow
+  name: issue65_m3_J12
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: package
+  value:
+    plugin_unique_identifier: langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2
+    version: null
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - description: Reviewed Booklet staging origin.
+    id: 00000000-0000-4000-8000-000000000065
+    name: BOOKLET_ORIGIN
+    selector:
+    - env
+    - BOOKLET_ORIGIN
+    value: https://booklet-staging.uniwares.co.uk
+    value_type: string
+  - description: Dedicated runner callback key; bind privately before execution.
+    id: 00000000-0000-4000-8000-000000000066
+    name: BOOKLET_TOOL_KEY
+    selector:
+    - env
+    - BOOKLET_TOOL_KEY
+    value: ''
+    value_type: secret
+  features:
+    file_upload:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        sourceType: code
+        targetType: http-request
+      id: identity-authorize
+      source: identity
+      sourceHandle: source
+      target: authorize
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: http-request
+        targetType: code
+      id: authorize-simulate
+      source: authorize
+      sourceHandle: source
+      target: simulate
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: if-else
+      id: simulate-authorized
+      source: simulate
+      sourceHandle: source
+      target: authorized
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: http-request
+      id: authorized-save
+      source: authorized
+      sourceHandle: 'true'
+      target: save
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: end
+      id: authorized-paused
+      source: authorized
+      sourceHandle: 'false'
+      target: paused
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: http-request
+        targetType: code
+      id: save-ack
+      source: save
+      sourceHandle: source
+      target: ack
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: end
+      id: ack-finish
+      source: ack
+      sourceHandle: source
+      target: finish
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: start
+        targetType: if-else
+      id: start-real_mode
+      source: start
+      sourceHandle: source
+      target: real_mode
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: code
+      id: real_mode-real_identity
+      source: real_mode
+      sourceHandle: 'true'
+      target: real_identity
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: if-else
+      id: real_mode-m4_mode
+      source: real_mode
+      sourceHandle: 'false'
+      target: m4_mode
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: code
+      id: m4_mode-identity
+      source: m4_mode
+      sourceHandle: 'true'
+      target: identity
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: code
+      id: m4_mode-m4_identity
+      source: m4_mode
+      sourceHandle: 'false'
+      target: m4_identity
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: http-request
+      id: m4_identity-m4_authorize
+      source: m4_identity
+      sourceHandle: source
+      target: m4_authorize
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: http-request
+        targetType: code
+      id: m4_authorize-m4_decode
+      source: m4_authorize
+      sourceHandle: source
+      target: m4_decode
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: if-else
+      id: m4_decode-m4_authorized
+      source: m4_decode
+      sourceHandle: source
+      target: m4_authorized
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: end
+      id: m4_authorized-m4_paused
+      source: m4_authorized
+      sourceHandle: 'false'
+      target: m4_paused
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: llm
+      id: m4_authorized-m4_llm
+      source: m4_authorized
+      sourceHandle: 'true'
+      target: m4_llm
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: llm
+        targetType: end
+      id: m4_llm-m4_llm-finish
+      source: m4_llm
+      sourceHandle: source
+      target: m4_llm-finish
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: llm
+      id: real_authorized-real_llm
+      source: real_authorized
+      sourceHandle: 'true'
+      target: real_llm
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: llm
+        targetType: end
+      id: real_llm-real_llm-finish
+      source: real_llm
+      sourceHandle: source
+      target: real_llm-finish
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: http-request
+      id: real_identity-real_authorize
+      source: real_identity
+      sourceHandle: source
+      target: real_authorize
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: http-request
+        targetType: code
+      id: real_authorize-real_decode
+      source: real_authorize
+      sourceHandle: source
+      target: real_decode
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: code
+        targetType: if-else
+      id: real_decode-real_authorized
+      source: real_decode
+      sourceHandle: source
+      target: real_authorized
+      targetHandle: target
+      type: custom
+    - data:
+        sourceType: if-else
+        targetType: end
+      id: real_authorized-real_paused
+      source: real_authorized
+      sourceHandle: 'false'
+      target: real_paused
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        title: Simulated input only
+        type: start
+        variables:
+        - default: ''
+          label: run_id
+          options: []
+          required: true
+          type: text-input
+          variable: run_id
+        - default: ''
+          label: operation_id
+          options: []
+          required: true
+          type: text-input
+          variable: operation_id
+        - default: ''
+          label: parent_workflow_run_id
+          options: []
+          required: false
+          type: text-input
+          variable: parent_workflow_run_id
+        - default: ''
+          label: mode
+          options: []
+          required: true
+          type: text-input
+          variable: mode
+      id: start
+      position:
+        x: 0
+        y: 0
+      type: custom
+    - data:
+        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
+          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'simulated':\n\
+          \        raise ValueError('This publication supports simulation only')\n\
+          \    for value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n\
+          \    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n\
+          \    return {'identity_json': json.dumps({'runId': run_id, 'operationId':\
+          \ operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
+          \ parent_workflow_run_id or None})}\n"
+        code_language: python3
+        outputs:
+          identity_json:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: Validate simulation and build identity
+        type: code
+        variables:
+        - value_selector:
+          - start
+          - run_id
+          variable: run_id
+        - value_selector:
+          - start
+          - operation_id
+          variable: operation_id
+        - value_selector:
+          - sys
+          - workflow_run_id
+          variable: workflow_run_id
+        - value_selector:
+          - start
+          - parent_workflow_run_id
+          variable: parent_workflow_run_id
+        - value_selector:
+          - start
+          - mode
+          variable: mode
+      id: identity
+      position:
+        x: 280
+        y: 0
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - type: text
+            value: '{{#identity.identity_json#}}'
+          type: raw-text
+        headers: 'Content-Type:application/json
+
+          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
+        method: post
+        params: ''
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        ssl_verify: true
+        timeout:
+          connect: 10
+          read: 30
+          write: 30
+        title: Reserve once in Booklet
+        type: http-request
+        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
+      id: authorize
+      position:
+        x: 560
+        y: 0
+      type: custom
+    - data:
+        code: "\"\"\"Self-contained Dify Code node fixture for simulated J01-J10 proposals.\n\
+          \nPinned Ali J03-J10 source: 631f547ec3f7ce375f740dd6f2b1b9aaebbde940.\n\
+          Fixed-case simulation retains narrative dependencies and complete content.\n\
+          Booklet owns durable IDs and acceptance; preference deviations remain warnings.\n\
+          \"\"\"\n\nimport hashlib\nimport json\nimport re\nfrom uuid import UUID\n\
+          \n\nCASES = {\n    \"playful_kid\": {\n        \"brief\": \"A young inventor\
+          \ and tiny robot rescue a runaway kite; playful and reassuring; readers\
+          \ 6–8; three single-scene story pages plus cover, two recurring characters,\
+          \ one location.\",\n        \"title\": \"The Kite Rescue\", \"age\": \"\
+          6-8\", \"premise\": \"A young inventor and a tiny robot rescue a runaway\
+          \ kite in their neighborhood park.\",\n        \"theme\": \"Helping together\
+          \ makes a hard problem smaller.\", \"promise\": \"A playful rescue ends\
+          \ with everyone safe and proud.\", \"tone\": \"Playful and reassuring\"\
+          ,\n        \"scope\": \"Three single-scene story pages plus a cover, with\
+          \ two recurring characters and one park location.\",\n        \"characters\"\
+          : [(\"Young inventor\", \"Invents a safe way to reach the kite\", \"Friend\
+          \ and maker of the tiny robot\"), (\"Tiny robot\", \"Spots the kite and\
+          \ helps test the plan\", \"Trusted companion of the inventor\")],\n    \
+          \    \"locations\": [(\"Neighborhood park\", \"The kite escapes and is recovered\
+          \ here\")],\n        \"arc\": [\"The inventor and robot fly a kite in the\
+          \ park.\", \"A gust carries the kite into a tree.\", \"Their first reach\
+          \ falls short, so they assemble a gentle retrieval tool.\", \"The inventor\
+          \ listens to the robot's safer route around the tree.\", \"They recover\
+          \ the kite and fly it together again.\"],\n        \"prose\": [\n      \
+          \      \"The young inventor lifted a bright kite into the park breeze. The\
+          \ tiny robot rolled beside them, chirping as the kite climbed. For a while,\
+          \ they watched it dance above the grass together.\",\n            \"A sudden\
+          \ gust tugged the string from the inventor's hand. The kite caught high\
+          \ in a tree, beyond either friend's reach. The robot spotted it first and\
+          \ gave a worried beep.\",\n            \"The inventor tried a long stick,\
+          \ but its tip fell short. They stopped before shaking the branch and made\
+          \ a soft hook from the safe things in their bag. Even that tool could not\
+          \ reach from where they stood.\",\n            \"The robot rolled around\
+          \ the trunk and found a clear path to a lower branch. The inventor listened,\
+          \ moved with the robot, and lifted the hook gently. Together they eased\
+          \ the kite free without hurting the tree.\",\n            \"Back on the\
+          \ grass, the inventor checked the kite and smiled at the robot. They held\
+          \ the string together as the breeze lifted it again. The rescue had worked\
+          \ because each friend noticed something the other had missed.\",\n     \
+          \   ],\n    },\n    \"enthusiast_parent\": {\n        \"brief\": \"A child\
+          \ and grandparent turn a rainy afternoon into an indoor adventure; warm;\
+          \ readers 3–5; five story pages plus cover, two recurring characters, one\
+          \ location, including one simple two-panel page.\",\n        \"title\":\
+          \ \"The Rainy Room Adventure\", \"age\": \"3-5\", \"premise\": \"A child\
+          \ and grandparent turn a rainy afternoon into an indoor adventure.\",\n\
+          \        \"theme\": \"Imagination and companionship brighten a quiet day.\"\
+          , \"promise\": \"A warm adventure ends in comfort and shared delight.\"\
+          , \"tone\": \"Warm and gentle\",\n        \"scope\": \"Five story pages\
+          \ plus a cover, with two recurring characters, one home location, and one\
+          \ simple two-panel page.\",\n        \"characters\": [(\"Child\", \"Chooses\
+          \ the adventure's destination\", \"Grandchild of the grandparent\"), (\"\
+          Grandparent\", \"Helps build and explore a pretend world\", \"Grandparent\
+          \ of the child\")],\n        \"locations\": [(\"Family living room\", \"\
+          A safe room becomes the imagined adventure setting\")],\n        \"arc\"\
+          : [\"Rain keeps the child and grandparent inside.\", \"The child imagines\
+          \ the sofa as a boat.\", \"They build a blanket sail and encounter a pretend\
+          \ storm.\", \"The child suggests steering toward a pillow island.\", \"\
+          They arrive, share a snack, and listen to the rain together.\"],\n     \
+          \   \"prose\": [\n            \"Rain tapped the living room window all afternoon.\
+          \ The child looked at the gray sky, and the grandparent settled beside them.\
+          \ They decided that staying inside could be the start of an adventure.\"\
+          ,\n            \"The child pointed to the sofa and imagined a boat. The\
+          \ grandparent stepped aboard the rug beside it, and together they named\
+          \ their quiet room a wide sea. The child became the captain.\",\n      \
+          \      \"They draped a blanket over the sofa to make a sail. When the rain\
+          \ grew louder, they pretended a storm had found their boat. The sail slipped,\
+          \ so they held it steady and waited together.\",\n            \"The child\
+          \ saw a pile of pillows across the room and called it an island. The grandparent\
+          \ followed the captain's plan as they steered their pretend boat toward\
+          \ it. Soon the blanket sail rested safely beside the pillows.\",\n     \
+          \       \"On their pillow island, the child and grandparent shared a snack.\
+          \ The rain was still falling, but it sounded gentle now. They sat close,\
+          \ pleased with the world they had made together.\",\n        ],\n    },\n\
+          \    \"professional_creator\": {\n        \"brief\": \"Two friends repair\
+          \ a community observatory after a disagreement; precise emotional arc; readers\
+          \ 9–12; eight story pages plus cover, two recurring characters, two locations,\
+          \ at least two multi-panel pages.\",\n        \"title\": \"The Observatory\
+          \ Lantern\", \"age\": \"9-12\", \"premise\": \"Two friends repair a community\
+          \ observatory after a disagreement.\",\n        \"theme\": \"Trust grows\
+          \ when friends listen and share responsibility.\", \"promise\": \"An honest\
+          \ repair restores both the observatory and the friendship.\", \"tone\":\
+          \ \"Reflective and hopeful\",\n        \"scope\": \"Eight story pages plus\
+          \ a cover, with two recurring characters, two locations, and at least two\
+          \ multi-panel pages.\",\n        \"characters\": [(\"First friend\", \"\
+          Finds the damaged observatory lantern\", \"Friend and project partner of\
+          \ the second friend\"), (\"Second friend\", \"Diagnoses the lantern and\
+          \ proposes a repair\", \"Friend and project partner of the first friend\"\
+          )],\n        \"locations\": [(\"Community observatory\", \"The damaged lantern\
+          \ must be repaired before viewing night\"), (\"Workshop\", \"The friends\
+          \ test a replacement part and talk through their disagreement\")],\n   \
+          \     \"arc\": [\"The friends prepare the observatory for viewing night.\"\
+          , \"A disagreement distracts them and the lantern stops working.\", \"Separate\
+          \ repair attempts fail, and the opening time approaches.\", \"They acknowledge\
+          \ each other's ideas and combine their plans.\", \"The lantern works; they\
+          \ welcome neighbors and watch the stars together.\"],\n        \"prose\"\
+          : [\n            \"The two friends opened the community observatory before\
+          \ viewing night. One checked the lantern while the other arranged the tools\
+          \ they would need. They had built this evening together, and both wanted\
+          \ their neighbors to feel welcome.\",\n            \"When the lantern failed,\
+          \ each friend thought they knew the cause. Their disagreement grew sharper\
+          \ as the room darkened. They turned away from each other, and the observatory\
+          \ remained unready.\",\n            \"Each friend tried a separate repair,\
+          \ but neither attempt restored the light. The opening hour drew closer.\
+          \ Looking at their unfinished work, they began to understand that the fault\
+          \ needed both of their ideas.\",\n            \"At the workshop, one friend\
+          \ explained the damaged part while the other described a safer connection.\
+          \ They apologized for talking past each other and tested a replacement together.\
+          \ The lantern glowed steadily in their hands.\",\n            \"They carried\
+          \ the repaired lantern back to the observatory. As neighbors arrived, the\
+          \ friends welcomed them side by side under the new light. Above them, the\
+          \ first stars appeared, and their shared work felt stronger than either\
+          \ plan alone.\",\n        ],\n    },\n}\n\nTASKS = (\"J01\", \"J02\", \"\
+          J03\", \"J04\", \"J05\", \"J06\", \"J07\", \"J08\")\nPREFIX = \"Approved\
+          \ concept constraint: \"\n\n\ndef current_version(artifact):\n    if not\
+          \ artifact:\n        return None\n    return next((item for item in artifact.get(\"\
+          versions\", []) if item[\"id\"] == artifact.get(\"currentVersionId\")),\
+          \ None)\n\n\ndef add_notes(existing, additions):\n    return existing +\
+          \ [item for item in additions if item not in existing]\n\n\ndef source(context,\
+          \ task):\n    row = next((item for item in context.get(\"approvedSources\"\
+          , []) if item[\"taskId\"] == task), None)\n    if not row:\n        raise\
+          \ ValueError(f'{context[\"taskId\"]} requires approved {task}.')\n    return\
+          \ row[\"content\"]\n\n\ndef proposal(task, content):\n    return {\"kind\"\
+          : \"proposal\", \"payload\": {\"taskId\": task, \"content\": content}}\n\
+          \n\ndef text(value, limit=16000):\n    return isinstance(value, str) and\
+          \ 0 < len(value) <= limit and bool(value.strip())\n\n\ndef uuid(value):\n\
+          \    return isinstance(value, str) and bool(re.fullmatch(r\"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)\"\
+          , value))\n\n\ndef assembled_style(content):\n    \"\"\"Mirror the assembled\
+          \ shape needed by tester eligibility, not stored approval.\"\"\"\n\n   \
+          \ def texts(value):\n        return isinstance(value, list) and len(value)\
+          \ <= 100 and all(text(item) for item in value)\n\n    def hash64(value):\n\
+          \        return isinstance(value, str) and bool(re.fullmatch(r\"[0-9a-f]{64}\"\
+          , value))\n\n    if not isinstance(content, dict) or content.get(\"schemaVersion\"\
+          ) != \"2\" or not text(content.get(\"title\"), 1000):\n        return False\n\
+          \    if not all(text(content.get(key)) for key in (\"typographyDirection\"\
+          , \"speechAndThoughtBubbleDirection\", \"stylePromptModule\")) or not hash64(content.get(\"\
+          stylePromptModuleHash\")):\n        return False\n    definition = content.get(\"\
+          styleDefinition\")\n    if not isinstance(definition, dict) or not all(text(definition.get(key))\
+          \ for key in (\"mediumAndLineWork\", \"shapeLanguageAndProportions\", \"\
+          colourAndContrast\", \"textureAndRendering\", \"lightingAndAtmosphere\"\
+          , \"emotionalTone\", \"accessibilityAndReadability\")):\n        return\
+          \ False\n    if not texts(content.get(\"exclusions\")) or not texts(content.get(\"\
+          approvalQuestions\")) or not uuid(content.get(\"draftStyleVersionId\")):\n\
+          \        return False\n    samples = content.get(\"samples\")\n    if not\
+          \ isinstance(samples, list) or len(samples) != 2 or any(not isinstance(item,\
+          \ dict) for item in samples) or {item.get(\"sampleKey\") for item in samples}\
+          \ != {\"sample_1\", \"sample_2\"}:\n        return False\n    for sample\
+          \ in samples:\n        build = sample.get(\"build\")\n        if not text(sample.get(\"\
+          purpose\")) or not isinstance(build, dict) or not text(build.get(\"prompt\"\
+          )) or not hash64(build.get(\"stylePromptModuleHash\")) or not all(uuid(build.get(key))\
+          \ for key in (\"operationId\", \"assetId\")):\n            return False\n\
+          \        sources = build.get(\"sourceVersionIds\")\n        if not isinstance(sources,\
+          \ list) or not 1 <= len(sources) <= 10 or not all(uuid(item) for item in\
+          \ sources) or len(set(sources)) != len(sources):\n            return False\n\
+          \    return True\n\n\ndef style_fixture(context, previous, revision):\n\
+          \    concept, outline, manuscript, characters, locations = [source(context,\
+          \ task) for task in (\"J01\", \"J02\", \"J05\", \"J06\", \"J07\")]\n   \
+          \ for task in (\"J01\", \"J02\", \"J05\", \"J06\", \"J07\"):\n        UUID(next(item[\"\
+          id\"] for item in context[\"approvedSources\"] if item[\"taskId\"] == task))\n\
+          \    persona = context[\"persona\"]\n    if concept[\"sourceInput\"] !=\
+          \ context[\"brief\"] or len(outline[\"characters\"]) != 2 or len(characters[\"\
+          characters\"]) != 2 or len(outline[\"locations\"]) != (2 if persona == \"\
+          professional_creator\" else 1) or len(locations[\"locations\"]) != (2 if\
+          \ persona == \"professional_creator\" else 1):\n        raise ValueError(\"\
+          Reference sources do not match fixed case\")\n    current = previous[\"\
+          content\"] if previous and (context.get(\"currentTarget\") or {}).get(\"\
+          state\") != \"needs_review\" else None\n    plans = current.get(\"samplePlan\"\
+          ) if current else None\n    if current and assembled_style(current):\n \
+          \       plans = [{\"sampleKey\": item[\"sampleKey\"], \"purpose\": item[\"\
+          purpose\"]} for item in current[\"samples\"]]\n    direction = \"Playful\
+          \ clear shapes and lively but reassuring movement for developing readers.\"\
+          \ if persona == \"playful_kid\" else \"Warm rounded shapes, gentle contrast,\
+          \ and calm readable detail for early readers.\" if persona == \"enthusiast_parent\"\
+          \ else \"Precise environmental detail and restrained light shifts that follow\
+          \ the older readers' emotional arc.\"\n    module = current[\"stylePromptModule\"\
+          ] if current else \"\\n\".join([\n        f\"Style direction: {direction}\"\
+          ,\n        f'Visual tone: {concept[\"tone\"]}. Use clear expressive faces\
+          \ and body language to communicate changing emotions.',\n        \"Composition:\
+          \ Show a legible primary action, expressive body language, and enough environmental\
+          \ detail to orient the reader without fixing a scene layout.\",\n      \
+          \  \"Continuity: Preserve approved character and place facts in each scene-specific\
+          \ prompt.\",\n        \"Lettering: Leave clean readable space for narration;\
+          \ use clear speech bubbles, distinct thought bubbles, restrained sound effects,\
+          \ and diegetic text only where the story calls for it.\",\n    ])\n    if\
+          \ current and (current.get(\"stylePromptModuleHash\") != hashlib.sha256(module.encode(\"\
+          utf-8\")).hexdigest() or not isinstance(plans, list) or len(plans) != 2\
+          \ or {item.get(\"sampleKey\") for item in plans} != {\"sample_1\", \"sample_2\"\
+          }):\n        raise ValueError(\"Current style proposal is inconsistent\"\
+          )\n    notes = ([\"Revision request: \" + revision] if revision else [])\
+          \ + [f'{item[\"question\"]}: {item[\"answer\"]}' for item in context.get(\"\
+          questionAnswers\", []) if item.get(\"answer\") and item[\"answer\"].strip()]\n\
+          \    content = {\"schemaVersion\": \"2\", \"title\": current[\"title\"]\
+          \ if current else outline[\"title\"] + \" visual style\",\n        \"styleDefinition\"\
+          : current[\"styleDefinition\"] if current else {\"mediumAndLineWork\": f\"\
+          Illustrated storybook with {direction}\", \"shapeLanguageAndProportions\"\
+          : direction, \"colourAndContrast\": f'Palette follows {concept[\"tone\"\
+          ]}; preserve readable contrast.', \"textureAndRendering\": \"Controlled\
+          \ texture keeps faces, actions, and important objects legible.\", \"lightingAndAtmosphere\"\
+          : f'Light supports {outline[\"emotionalArc\"]}.', \"emotionalTone\": concept[\"\
+          emotionalPromise\"], \"accessibilityAndReadability\": f'Clear silhouettes\
+          \ and text-safe space suit the {concept[\"audience\"][\"ageBand\"]} audience.'},\n\
+          \        \"typographyDirection\": current[\"typographyDirection\"] if current\
+          \ else \"Readable storybook lettering with clear narration hierarchy and\
+          \ generous spacing.\",\n        \"speechAndThoughtBubbleDirection\": current[\"\
+          speechAndThoughtBubbleDirection\"] if current else \"Separate speech and\
+          \ thought bubbles; keep tails unambiguous and leave room for sound effects\
+          \ and diegetic signs.\",\n        \"stylePromptModule\": module, \"stylePromptModuleHash\"\
+          : hashlib.sha256(module.encode(\"utf-8\")).hexdigest(),\n        \"exclusions\"\
+          : current[\"exclusions\"] if current else [\"Do not change approved character\
+          \ identity or location anchors.\"],\n        \"approvalQuestions\": add_notes(current[\"\
+          approvalQuestions\"] if current else [\"Do both samples express the intended\
+          \ emotion, action, environment, and detail?\"], notes),\n        \"samplePlan\"\
+          : plans if plans is not None else [{\"sampleKey\": \"sample_1\", \"purpose\"\
+          : f'Show {\" and \".join(item[\"nameOrRole\"] for item in characters[\"\
+          characters\"])}: {manuscript[\"units\"][0][\"action\"]} in {locations[\"\
+          locations\"][0][\"title\"]}; establish emotion, setting, and readable detail.'},\
+          \ {\"sampleKey\": \"sample_2\", \"purpose\": f'Show {manuscript[\"units\"\
+          ][-1][\"action\"]} with the same characters and environmental anchors; test\
+          \ emotional change and action clarity.'}]}\n    return proposal(\"J08\"\
+          , content)\n\n\ndef sheet_fixture(context, previous, revision):\n    \"\"\
+          \"Proposal only; Booklet must validate source approval and stored assets.\"\
+          \"\"\n    task = context[\"taskId\"]\n    final_task = \"J06\" if task ==\
+          \ \"J09\" else \"J07\"\n    rows = context.get(\"approvedSources\", [])\n\
+          \    def row(task_id):\n        matches = [item for item in rows if item[\"\
+          taskId\"] == task_id]\n        if len(matches) != 1:\n            raise\
+          \ ValueError(\"Sheet requires one final list and one assembled style source\"\
+          )\n        UUID(matches[0][\"id\"])\n        return matches[0]\n    final,\
+          \ style_row = row(final_task), row(\"J08\")\n    style = style_row[\"content\"\
+          ]\n    if not assembled_style(style) or style[\"stylePromptModuleHash\"\
+          ] != hashlib.sha256(style[\"stylePromptModule\"].encode(\"utf-8\")).hexdigest():\n\
+          \        raise ValueError(\"Sheet requires an assembled style with its exact\
+          \ module hash\")\n    # Match the canonical reference parser's sample-build\
+          \ invariants.\n    builds = [item[\"build\"] for item in style[\"samples\"\
+          ]]\n    if len({item[\"operationId\"] for item in builds}) != 2 or len({item[\"\
+          assetId\"] for item in builds}) != 2:\n        raise ValueError(\"Style\
+          \ samples must have distinct build identities\")\n    for build in builds:\n\
+          \        if build[\"stylePromptModuleHash\"] != style[\"stylePromptModuleHash\"\
+          ] or style[\"stylePromptModule\"] not in build[\"prompt\"] or style[\"draftStyleVersionId\"\
+          ] not in build[\"sourceVersionIds\"]:\n            raise ValueError(\"Style\
+          \ sample build differs from the approved module\")\n    character = task\
+          \ == \"J09\"\n    id_key = \"characterId\" if character else \"locationId\"\
+          \n    entries = final[\"content\"][\"characters\" if character else \"locations\"\
+          ]\n    expected_count = 2 if character or context[\"persona\"] == \"professional_creator\"\
+          \ else 1\n    if len(entries) != expected_count:\n        raise ValueError(\"\
+          Final list differs from fixed case subject count\")\n    targets = [item\
+          \ for item in entries if item[id_key] == context.get(\"subjectId\")]\n \
+          \   if len(targets) != 1 or not targets[0][\"sheetRequired\"] or (character\
+          \ and targets[0][\"recurrence\"] != \"recurring\"):\n        raise ValueError(\"\
+          Sheet requires an eligible final-list subject\")\n    target = targets[0]\n\
+          \    UUID(target[id_key])\n    current = previous[\"content\"] if previous\
+          \ and (context.get(\"currentTarget\") or {}).get(\"state\") != \"needs_review\"\
+          \ else None\n    if current and current[id_key] != target[id_key]:\n   \
+          \     raise ValueError(\"Retained sheet belongs to a different subject\"\
+          )\n    answers = [item for item in context.get(\"questionAnswers\", [])\
+          \ if item.get(\"answer\") and item[\"answer\"].strip() and item.get(\"taskId\"\
+          ) in (None, task)]\n    notes = ([\"Revision request: \" + revision] if\
+          \ revision else []) + [f'{item[\"question\"]}: {item[\"answer\"]}' for item\
+          \ in answers]\n    expressions = []\n    if character:\n        for item\
+          \ in target[\"expressions\"]:\n            if item.strip() and item.strip()\
+          \ not in expressions:\n                expressions.append(item.strip())\n\
+          \        question = f'Which three distinct expressions should {target[\"\
+          nameOrRole\"]}\\'s sheet show?'\n        if len(expressions) < 3:\n    \
+          \        answer = next((item[\"answer\"] for item in answers if item[\"\
+          question\"] == question), \"\")\n            for item in re.split(r\"[,;\\\
+          n]\", answer):\n                if item.strip() and item.strip() not in\
+          \ expressions:\n                    expressions.append(item.strip())\n \
+          \           if len(expressions) < 3:\n                return {\"kind\":\
+          \ \"clarification\", \"payload\": {\"question\": question}}\n    content\
+          \ = {\"schemaVersion\": \"2\", \"title\": current[\"title\"] if current\
+          \ else (target[\"nameOrRole\"] + \" character sheet\" if character else\
+          \ target[\"title\"] + \" location sheet\"),\n        \"finalListVersionId\"\
+          : final[\"id\"], \"styleVersionId\": style_row[\"id\"],\n        \"stylePromptModule\"\
+          : style[\"stylePromptModule\"], \"stylePromptModuleHash\": style[\"stylePromptModuleHash\"\
+          ],\n        \"reviewQuestions\": add_notes(current[\"reviewQuestions\"]\
+          \ if current else [\"Is this the same character in every view and expression?\"\
+          \ if character else \"Are the location anchors recognizable in all views?\"\
+          ], notes), id_key: target[id_key]}\n    if character:\n        content.update(sheetPromptModule=current[\"\
+          sheetPromptModule\"] if current else f'One character montage for {target[\"\
+          nameOrRole\"]}. Preserve {target[\"physicalDescription\"]}. Show full-body\
+          \ front, full-body back, full-body side, a detailed neutral facial view,\
+          \ and three distinct expressions. Include all attire: {\"; \".join(target[\"\
+          attireRequirements\"]) or \"none specified\"}. Include all accessories:\
+          \ {\"; \".join(target[\"accessories\"]) or \"none specified\"}. Add no extra\
+          \ or unapproved attire. No readable labels, watermarks, logos, or unrelated\
+          \ characters.',\n            characterDesignProfile=current[\"characterDesignProfile\"\
+          ] if current else f'{target[\"background\"]} {target[\"lifeStage\"]}. {target[\"\
+          physicalDescription\"]} {target[\"personalityAndActing\"]}',\n         \
+          \   attireRequirements=target[\"attireRequirements\"], accessories=target[\"\
+          accessories\"], requiredViews=[\"front\", \"back\", \"side\", \"neutral_facial\"\
+          ], additionalExpressions=current[\"additionalExpressions\"] if current else\
+          \ expressions[:3])\n    else:\n        content.update(sheetPromptModule=current[\"\
+          sheetPromptModule\"] if current else f'One location montage for {target[\"\
+          title\"]}. Isometric overview plus two supporting views. Preserve stable\
+          \ anchors: {\"; \".join(target[\"stableAnchors\"])}. Include required features:\
+          \ {\"; \".join(target[\"requiredFeatures\"]) or \"none specified\"}. Do\
+          \ not add page action or weather unless it is an approved stable fact. No\
+          \ readable labels, watermarks, logos, or unrelated characters.',\n     \
+          \       locationDefinitionProfile=current[\"locationDefinitionProfile\"\
+          ] if current else f'{target[\"basicDescription\"]} {target[\"storyPurpose\"\
+          ]}', stableAnchors=target[\"stableAnchors\"], requiredFeatures=target[\"\
+          requiredFeatures\"], overview=\"isometric\",\n            supportingViews=current[\"\
+          supportingViews\"] if current else [{\"angle\": \"entry\", \"shows\": f'Entry\
+          \ view showing {target[\"stableAnchors\"][0]}.'}, {\"angle\": \"reverse\"\
+          , \"shows\": f'Reverse view showing {(target[\"requiredFeatures\"] or target[\"\
+          stableAnchors\"])[0]}.'}])\n    return proposal(task, content)\n\n\ndef\
+          \ later_fixture(context, story, previous, revision, details):\n    task\
+          \ = context[\"taskId\"]\n    persona = context[\"persona\"]\n    changed\
+          \ = (context.get(\"currentTarget\") or {}).get(\"state\") == \"needs_review\"\
+          \n    current = previous[\"content\"] if previous and not changed else None\n\
+          \    notes = details + ([\"Revision request: \" + revision] if revision\
+          \ else [])\n    if task == \"J08\":\n        return style_fixture(context,\
+          \ previous, revision)\n    if task in (\"J03\", \"J04\"):\n        concept,\
+          \ outline = source(context, \"J01\"), source(context, \"J02\")\n       \
+          \ if concept[\"sourceInput\"] != context[\"brief\"] or len(outline[\"characters\"\
+          ]) != 2 or len(outline[\"locations\"]) != (2 if persona == \"professional_creator\"\
+          \ else 1):\n            raise ValueError(\"Approved narrative sources do\
+          \ not match fixed case\")\n        answers = [f'{item[\"question\"]}: {item[\"\
+          answer\"]}' for item in context.get(\"questionAnswers\", []) if item.get(\"\
+          answer\")]\n        if task == \"J03\":\n            rows = [{\"entryKey\"\
+          : f\"character_{i + 1}\", \"nameOrRole\": item[\"nameOrRole\"], \"narrativeFunction\"\
+          : item[\"narrativeRole\"], \"role\": \"main\" if i == 0 else \"supporting\"\
+          , \"knownRelationship\": item[\"relationship\"], \"knownFacts\": [], \"\
+          openQuestions\": item[\"openDetails\"]} for i, item in enumerate(outline[\"\
+          characters\"])]\n            content = {\"schemaVersion\": \"2\", \"title\"\
+          : current[\"title\"] if current else outline[\"title\"], \"characters\"\
+          : [{key: value for key, value in item.items() if key != \"characterId\"\
+          } for item in current[\"characters\"]] if current else rows, \"castNotes\"\
+          : (current[\"castNotes\"] if current else []) + [item for item in answers\
+          \ if not current or item not in current[\"castNotes\"]] + ([\"Revision request:\
+          \ \" + revision] if revision else []), \"representationAndSafety\": current[\"\
+          representationAndSafety\"] if current else [], \"manuscriptQuestions\":\
+          \ current[\"manuscriptQuestions\"] if current else [], \"approvalQuestions\"\
+          : current[\"approvalQuestions\"] if current else [\"Does this cast reflect\
+          \ the approved story outline?\"]}\n        else:\n            rows = [{\"\
+          entryKey\": f\"location_{i + 1}\", \"title\": item[\"name\"], \"storyPurpose\"\
+          : item[\"storyPurpose\"], \"knownFacts\": [], \"likelyScenes\": [item[\"\
+          storyPurpose\"]], \"openQuestions\": item[\"openDetails\"]} for i, item\
+          \ in enumerate(outline[\"locations\"])]\n            content = {\"schemaVersion\"\
+          : \"2\", \"title\": current[\"title\"] if current else outline[\"title\"\
+          ], \"locations\": [{key: value for key, value in item.items() if key !=\
+          \ \"locationId\"} for item in current[\"locations\"]] if current else rows,\
+          \ \"worldAndSafetyNotes\": (current[\"worldAndSafetyNotes\"] if current\
+          \ else []) + [item for item in answers if not current or item not in current[\"\
+          worldAndSafetyNotes\"]] + ([\"Revision request: \" + revision] if revision\
+          \ else []), \"manuscriptQuestions\": current[\"manuscriptQuestions\"] if\
+          \ current else [], \"approvalQuestions\": current[\"approvalQuestions\"\
+          ] if current else [\"Do these places serve the approved story outline?\"\
+          ]}\n        return proposal(task, content)\n    if task == \"J05\":\n  \
+          \      outline, cast, places = source(context, \"J02\"), source(context,\
+          \ \"J03\"), source(context, \"J04\")\n        character_ids = [item[\"characterId\"\
+          ] for item in cast[\"characters\"]]\n        first_place = next((item[\"\
+          locationId\"] for item in places[\"locations\"] if item[\"entryKey\"] ==\
+          \ \"location_1\"), places[\"locations\"][0][\"locationId\"])\n        workshop\
+          \ = next((item[\"locationId\"] for item in places[\"locations\"] if item[\"\
+          entryKey\"] == \"location_2\"), None)\n        beats = [outline[\"storyArc\"\
+          ][key] for key in (\"opening\", \"incitingAction\", \"escalation\", \"decisiveChoice\"\
+          , \"resolution\")]\n        units = []\n        for index, beat in enumerate(beats):\n\
+          \            units.append({\"unitKey\": f\"beat_{index + 1}\", \"beatTitle\"\
+          : [\"A shared beginning\", \"The trouble\", \"A first attempt\", \"A better\
+          \ choice\", \"A shared ending\"][index], \"prose\": beat + \" \" + story[\"\
+          prose\"][index], \"action\": beat, \"narration\": beat, \"charactersPresent\"\
+          : character_ids, \"locationId\": workshop if persona == \"professional_creator\"\
+          \ and index == 3 else first_place, \"dialogue\": [{\"speakerId\": character_ids[index\
+          \ % 2], \"text\": \"We did it together!\" if index == 4 else \"Let's listen\
+          \ and try together.\" if index == 3 else \"Let's see what we can do.\"}]})\n\
+          \        content = {\"schemaVersion\": \"2\", \"title\": current[\"title\"\
+          ] if current else outline[\"title\"], \"continuityNotes\": add_notes(current[\"\
+          continuityNotes\"] if current else [f'{cast[\"characters\"][0][\"nameOrRole\"\
+          ]} and {cast[\"characters\"][1][\"nameOrRole\"]} remain the same two story\
+          \ characters throughout.'], notes), \"units\": [{key: value for key, value\
+          \ in item.items() if key != \"unitId\"} for item in current[\"units\"]]\
+          \ if current else units, \"expansionNotes\": current[\"expansionNotes\"\
+          ] if current else [\"The story uses five narrative beats. Physical page\
+          \ count and layout remain later decisions.\"], \"openQuestions\": current[\"\
+          openQuestions\"] if current else [], \"approvalQuestions\": current[\"approvalQuestions\"\
+          ] if current else [\"Does this complete story preserve the approved arc\
+          \ and character relationships?\"]}\n        return proposal(task, content)\n\
+          \    if task == \"J06\":\n        cast, manuscript = source(context, \"\
+          J03\"), source(context, \"J05\")\n        rows = []\n        for character\
+          \ in cast[\"characters\"]:\n            unit_ids = [unit[\"unitId\"] for\
+          \ unit in manuscript[\"units\"] if character[\"characterId\"] in unit[\"\
+          charactersPresent\"]]\n            second = character[\"entryKey\"] == \"\
+          character_2\"\n            rows.append({\"characterId\": character[\"characterId\"\
+          ], \"nameOrRole\": character[\"nameOrRole\"], \"narrativeFunction\": character[\"\
+          narrativeFunction\"], \"background\": f'{character[\"nameOrRole\"]} is {character[\"\
+          knownRelationship\"].lower()} in this story.', \"lifeStage\": \"Grandparent\"\
+          \ if persona == \"enthusiast_parent\" and second else \"Small companion\
+          \ robot\" if persona == \"playful_kid\" and second else \"Young community\
+          \ member\" if persona == \"professional_creator\" else \"Child\", \"physicalDescription\"\
+          : \"A small, sturdy robot with a friendly face display.\" if persona ==\
+          \ \"playful_kid\" and second else \"A recognizable figure with a consistent\
+          \ silhouette and expressive face.\", \"personalityAndActing\": character[\"\
+          narrativeFunction\"], \"attireRequirements\": [], \"accessories\": [], \"\
+          expressions\": [\"Curious\", \"Concerned\", \"Relieved\"], \"openQuestions\"\
+          : character[\"openQuestions\"], \"unitIds\": unit_ids, \"recurrence\": \"\
+          recurring\" if len(unit_ids) > 1 else \"single_scene\", \"sheetRequired\"\
+          : len(unit_ids) > 1})\n        content = {\"schemaVersion\": \"2\", \"title\"\
+          : current[\"title\"] if current else manuscript[\"title\"], \"characters\"\
+          : current[\"characters\"] if current else rows, \"profileGuidance\": add_notes(current[\"\
+          profileGuidance\"] if current else [\"Keep each character recognizable across\
+          \ manuscript units.\"], notes), \"representationAndContinuity\": current[\"\
+          representationAndContinuity\"] if current else [\"Preserve the saved character\
+          \ identities and relationships.\"], \"approvalQuestions\": current[\"approvalQuestions\"\
+          ] if current else [\"Does this cast cover every manuscript scene?\"]}\n\
+          \        return proposal(task, content)\n    places, manuscript = source(context,\
+          \ \"J04\"), source(context, \"J05\")\n    rows = [{\"locationId\": place[\"\
+          locationId\"], \"title\": place[\"title\"], \"storyPurpose\": place[\"storyPurpose\"\
+          ], \"basicDescription\": f'{place[\"title\"]} is a recognizable setting\
+          \ for {place[\"storyPurpose\"].lower()}.', \"stableAnchors\": [place[\"\
+          title\"]], \"requiredFeatures\": place[\"knownFacts\"], \"continuityNotes\"\
+          : [\"Keep the place recognizable whenever the story returns.\"], \"openQuestions\"\
+          : place[\"openQuestions\"], \"unitIds\": [unit[\"unitId\"] for unit in manuscript[\"\
+          units\"] if unit[\"locationId\"] == place[\"locationId\"]], \"sheetRequired\"\
+          : True} for place in places[\"locations\"]]\n    content = {\"schemaVersion\"\
+          : \"2\", \"title\": current[\"title\"] if current else manuscript[\"title\"\
+          ], \"locations\": current[\"locations\"] if current else rows, \"profileGuidance\"\
+          : add_notes(current[\"profileGuidance\"] if current else [\"Use stable environmental\
+          \ anchors in every return to a location.\"], notes), \"worldSafetyAndAccessibility\"\
+          : current[\"worldSafetyAndAccessibility\"] if current else [\"Keep paths\
+          \ and activity suitable for the intended readers.\"], \"approvalQuestions\"\
+          : current[\"approvalQuestions\"] if current else [\"Does each location support\
+          \ its manuscript scenes?\"]}\n    return proposal(task, content)\n\n\ndef\
+          \ fixture(context):\n    role = context[\"role\"]\n    if role == \"manager\"\
+          :\n        task = context.get(\"eligibleRoute\")\n        if task in (\"\
+          J09\", \"J10\"):\n            target = context.get(\"eligibleTarget\")\n\
+          \            if not target or target.get(\"taskId\") != task or target.get(\"\
+          subjectKind\") != (\"character\" if task == \"J09\" else \"location\") or\
+          \ not uuid(target.get(\"subjectId\")):\n                raise ValueError(\"\
+          Manager has no eligible sheet subject\")\n            return {\"kind\":\
+          \ \"delegate\", \"payload\": {\"taskId\": task, \"subjectKind\": target[\"\
+          subjectKind\"], \"subjectId\": target[\"subjectId\"]}}\n        if task\
+          \ not in TASKS:\n            raise ValueError(\"Manager has no eligible\
+          \ narrative task\")\n        return {\"kind\": \"delegate\", \"payload\"\
+          : {\"taskId\": task, \"subjectKind\": \"book\", \"subjectId\": context[\"\
+          run\"][\"bookletId\"]}}\n    if role == \"tester\":\n        pending = context.get(\"\
+          pendingDecision\")\n        if pending:\n            if pending.get(\"kind\"\
+          ) == \"question\" and pending.get(\"questionId\"):\n                answer\
+          \ = \"Use Curious, Concerned, and Relieved expressions. Keep the character\
+          \ faithful to approved facts.\" if pending.get(\"taskId\") == \"J09\" else\
+          \ \"Keep the story age-appropriate, gentle, and faithful to the stated case\
+          \ brief.\"\n                return {\"kind\": \"decision\", \"payload\"\
+          : {\"decision\": {\"action\": \"answer\", \"questionId\": pending[\"questionId\"\
+          ], \"text\": answer}}}\n            raise ValueError(\"Unsupported pending\
+          \ decision\")\n        artifacts = context[\"currentArtifacts\"]\n     \
+          \   if context[\"persona\"] != \"professional_creator\" and not context.get(\"\
+          activeDelegation\") and not context[\"creatorMessages\"]:\n            if\
+          \ any(item[\"subjectKind\"] != \"book\" or item[\"subjectId\"] != context[\"\
+          bookletId\"] for item in artifacts):\n                raise ValueError(\"\
+          Book subject is inconsistent\")\n            return {\"kind\": \"decision\"\
+          , \"payload\": {\"decision\": {\"action\": \"delegate\", \"taskIds\": context.get(\"\
+          eligibleTaskIds\", [\"J01\", \"J02\"]), \"subjectId\": context[\"bookletId\"\
+          ]}}}\n        approved_ids = {item[\"currentVersionId\"] for item in artifacts\
+          \ if item[\"state\"] == \"approved\"}\n        versions = []\n        for\
+          \ artifact in artifacts:\n            if artifact[\"state\"] != \"draft\"\
+          :\n                continue\n            version = current_version(artifact)\n\
+          \            if not version:\n                raise ValueError(\"Draft has\
+          \ no current version\")\n            dependencies = version[\"dependencyVersionIds\"\
+          ]\n            if artifact[\"taskId\"] == \"J08\":\n                style\
+          \ = version.get(\"content\")\n                if not assembled_style(style)\
+          \ or version.get(\"sourceVersionId\") != style[\"draftStyleVersionId\"]\
+          \ or not dependencies or dependencies[0] != style[\"draftStyleVersionId\"\
+          ] or any(item not in approved_ids for item in dependencies[1:]):\n     \
+          \               continue\n            elif artifact[\"taskId\"] in (\"J09\"\
+          , \"J10\"):\n                sheet = version.get(\"content\") or {}\n  \
+          \              build = sheet.get(\"build\") or {}\n                subject_key\
+          \ = \"characterId\" if artifact[\"taskId\"] == \"J09\" else \"locationId\"\
+          \n                kind = \"character\" if artifact[\"taskId\"] == \"J09\"\
+          \ else \"location\"\n                if artifact.get(\"subjectKind\") !=\
+          \ kind or sheet.get(subject_key) != artifact.get(\"subjectId\") or not uuid(version.get(\"\
+          sourceVersionId\")) or dependencies != [version[\"sourceVersionId\"], sheet.get(\"\
+          finalListVersionId\"), sheet.get(\"styleVersionId\")] or any(item not in\
+          \ approved_ids for item in dependencies[1:]):\n                    continue\n\
+          \                if not all(uuid(build.get(key)) for key in (\"operationId\"\
+          , \"assetId\")) or not text(build.get(\"prompt\")) or build.get(\"stylePromptModuleHash\"\
+          ) != sheet.get(\"stylePromptModuleHash\") or build.get(\"sourceVersionIds\"\
+          ) != dependencies[1:] or not text(sheet.get(\"stylePromptModule\")) or sheet[\"\
+          stylePromptModule\"] not in build[\"prompt\"]:\n                    continue\n\
+          \            elif any(item not in approved_ids for item in dependencies):\n\
+          \                continue\n            versions.append(version[\"id\"])\n\
+          \        if not versions:\n            raise ValueError(\"No current eligible\
+          \ draft version\")\n        grant = context.get(\"activeDelegation\")\n\
+          \        if context[\"persona\"] != \"professional_creator\" and grant and\
+          \ any(item[\"taskId\"] in (\"J08\", \"J09\", \"J10\") and item[\"taskId\"\
+          ] in grant[\"taskIds\"] and item[\"currentVersionId\"] in versions for item\
+          \ in artifacts):\n            return {\"kind\": \"decision\", \"payload\"\
+          : {\"decision\": {\"action\": \"delegate\", \"taskIds\": grant[\"taskIds\"\
+          ], \"subjectId\": context[\"bookletId\"]}}}\n        return {\"kind\": \"\
+          decision\", \"payload\": {\"decision\": {\"action\": \"approve\", \"versionIds\"\
+          : versions}}}\n    if role != \"specialist\" or context.get(\"taskId\")\
+          \ not in (*TASKS, \"J09\", \"J10\"):\n        raise ValueError(\"Unsupported\
+          \ role or task\")\n    persona = context[\"persona\"]\n    story = CASES.get(persona)\n\
+          \    if not story or context[\"brief\"] != story[\"brief\"]:\n        raise\
+          \ ValueError(\"Fixed case brief differs\")\n    task = context[\"taskId\"\
+          ]\n    previous = current_version(context.get(\"currentTarget\"))\n    revision\
+          \ = (context.get(\"matchingRevision\") or {}).get(\"instruction\")\n   \
+          \ if task in (\"J09\", \"J10\"):\n        return sheet_fixture(context,\
+          \ previous, revision)\n    details = [f'{item[\"question\"]}: {item[\"answer\"\
+          ]}' for item in context.get(\"questionAnswers\", []) if item.get(\"answer\"\
+          ) and item.get(\"taskId\") in (None, task)]\n    if task not in (\"J01\"\
+          , \"J02\"):\n        return later_fixture(context, story, previous, revision,\
+          \ details)\n    if task == \"J01\":\n        base = dict(previous[\"content\"\
+          ]) if previous else {\"schemaVersion\": \"2\", \"title\": story[\"title\"\
+          ], \"sourceInput\": context[\"brief\"], \"audience\": {\"ageBand\": story[\"\
+          age\"], \"readingNeeds\": f'Clear language and pacing for readers {story[\"\
+          age\"]}.'}, \"premise\": story[\"premise\"], \"theme\": story[\"theme\"\
+          ], \"emotionalPromise\": story[\"promise\"], \"tone\": story[\"tone\"],\
+          \ \"storyScope\": story[\"scope\"], \"contentRequirements\": [story[\"scope\"\
+          ]], \"knownConstraints\": [\"Keep the named cast and locations consistent.\"\
+          ], \"deferredDecisions\": [\"Character appearance and visual style remain\
+          \ for later planning.\"], \"approvalQuestions\": [\"Does this concept match\
+          \ the intended audience and tone?\"]}\n        base[\"tone\"] = base[\"\
+          tone\"] + (\". Revision request: \" + revision if revision else \"\")\n\
+          \        base[\"knownConstraints\"] = add_notes(base[\"knownConstraints\"\
+          ], details)\n    else:\n        upstream = context.get(\"approvedUpstream\"\
+          )\n        if not upstream:\n            raise ValueError(\"J02 requires\
+          \ an approved J01 source\")\n        upstream = upstream[\"content\"]\n\
+          \        arc = story[\"arc\"]\n        base = dict(previous[\"content\"\
+          ]) if previous else {\"schemaVersion\": \"2\", \"title\": upstream[\"title\"\
+          ], \"summary\": f'{upstream[\"premise\"]} {arc[4]} Tone: {upstream[\"tone\"\
+          ]}.', \"characters\": [{\"nameOrRole\": a, \"narrativeRole\": b, \"relationship\"\
+          : c, \"openDetails\": []} for a, b, c in story[\"characters\"]], \"locations\"\
+          : [{\"name\": a, \"storyPurpose\": b, \"openDetails\": []} for a, b in story[\"\
+          locations\"]], \"storyArc\": dict(zip((\"opening\", \"incitingAction\",\
+          \ \"escalation\", \"decisiveChoice\", \"resolution\"), arc)), \"theme\"\
+          : upstream[\"theme\"], \"emotionalArc\": upstream[\"emotionalPromise\"],\
+          \ \"deferredDecisions\": [\"Exact page dialogue and visual design remain\
+          \ for later planning.\"] + [PREFIX + item for item in upstream[\"knownConstraints\"\
+          ]], \"approvalQuestions\": [\"Does this causal outline and resolution work\
+          \ for the audience?\"]}\n        changed = (context.get(\"currentTarget\"\
+          ) or {}).get(\"state\") == \"needs_review\"\n        retained = [item for\
+          \ item in base[\"deferredDecisions\"] if not item.startswith(PREFIX)] if\
+          \ changed else base[\"deferredDecisions\"]\n        source_decisions = [PREFIX\
+          \ + item for item in upstream[\"knownConstraints\"]] if changed else []\n\
+          \        summary = f'{upstream[\"premise\"]} {base[\"storyArc\"][\"resolution\"\
+          ]} Tone: {upstream[\"tone\"]}.' if changed else base[\"summary\"]\n    \
+          \    if changed:\n            base.update(title=upstream[\"title\"], theme=upstream[\"\
+          theme\"], emotionalArc=upstream[\"emotionalPromise\"])\n        base[\"\
+          summary\"] = summary + (\" Revision request: \" + revision if revision else\
+          \ \"\")\n        base[\"deferredDecisions\"] = retained + source_decisions\
+          \ + [item for item in details if item not in retained and item not in source_decisions]\n\
+          \    return proposal(task, base)\n\n\ndef simulation_main(authorization_body:\
+          \ str, run_id: str, operation_id: str, workflow_run_id: str, parent_workflow_run_id:\
+          \ str) -> dict:\n    data = json.loads(authorization_body)[\"data\"]\n \
+          \   if data.get(\"started\") is not True:\n        if data.get(\"reason\"\
+          ) == \"paused\":\n            return {\"booklet_result\": \"\", \"authorization_reason\"\
+          : \"paused\"}\n        raise ValueError(\"Operation was not authorized\"\
+          )\n    if data.get(\"mode\") != \"simulated\":\n        raise ValueError(\"\
+          Simulation requires simulated mode\")\n    fingerprint = data.get(\"inputFingerprint\"\
+          )\n    if not isinstance(fingerprint, str) or len(fingerprint) != 64 or\
+          \ any(char not in \"0123456789abcdef\" for char in fingerprint):\n     \
+          \   raise ValueError(\"Invalid saved fingerprint\")\n    result = fixture(data[\"\
+          context\"])\n    envelope = {\"runId\": run_id, \"operationId\": operation_id,\
+          \ \"workflowRunId\": workflow_run_id, \"parentWorkflowRunId\": parent_workflow_run_id\
+          \ or None, \"inputFingerprint\": fingerprint, \"result\": result}\n    return\
+          \ {\"booklet_result\": json.dumps(envelope, ensure_ascii=False, separators=(\"\
+          ,\", \":\")), \"authorization_reason\": \"\"}\n\n\"\"\"M3 J11 extension.\
+          \ Appended only to new M3 Code-node candidates.\"\"\"\n\nM2_FIXTURE = fixture\n\
+          \n\ndef pagination_fixture(context):\n    persona = context[\"persona\"\
+          ]\n    story = CASES.get(persona)\n    if not story or context.get(\"brief\"\
+          ) != story[\"brief\"]:\n        raise ValueError(\"Fixed case brief differs\"\
+          )\n    rows = context.get(\"approvedSources\") or []\n\n    def book(task):\n\
+          \        matches = [row for row in rows if row.get(\"taskId\") == task and\
+          \ row.get(\"subjectKind\", \"book\") == \"book\"]\n        if len(matches)\
+          \ != 1:\n            raise ValueError(\"J11 requires one approved book source\"\
+          )\n        return matches[0][\"content\"]\n\n    for task in (\"J01\", \"\
+          J02\", \"J08\"):\n        book(task)\n    manuscript, cast, places = book(\"\
+          J05\"), book(\"J06\"), book(\"J07\")\n    units = manuscript[\"units\"]\n\
+          \    if not units or any(not uuid(unit.get(\"unitId\")) for unit in units):\n\
+          \        raise ValueError(\"J11 requires saved manuscript unit IDs\")\n\
+          \    references = []\n    for row in rows:\n        task = row.get(\"taskId\"\
+          )\n        if task not in (\"J09\", \"J10\"):\n            continue\n  \
+          \      sheet = row[\"content\"]\n        kind = \"character\" if task ==\
+          \ \"J09\" else \"location\"\n        subject = sheet.get(\"characterId\"\
+          \ if task == \"J09\" else \"locationId\")\n        build = sheet.get(\"\
+          build\") or {}\n        if row.get(\"subjectKind\") != kind or row.get(\"\
+          subjectId\") != subject or not all(uuid(value) for value in (subject, row.get(\"\
+          id\"), build.get(\"assetId\"))):\n            raise ValueError(\"J11 sheet\
+          \ subject metadata differs\")\n        references.append({\"subjectKind\"\
+          : kind, \"subjectId\": subject, \"artifactVersionId\": row[\"id\"], \"assetId\"\
+          : build[\"assetId\"]})\n    required = [\"character:\" + item[\"characterId\"\
+          ] for item in cast[\"characters\"] if item[\"sheetRequired\"]] + [\"location:\"\
+          \ + item[\"locationId\"] for item in places[\"locations\"] if item[\"sheetRequired\"\
+          ]]\n    keys = [item[\"subjectKind\"] + \":\" + item[\"subjectId\"] for\
+          \ item in references]\n    if len(keys) != len(required) or len(set(keys))\
+          \ != len(keys) or set(keys) != set(required):\n        raise ValueError(\"\
+          J11 requires every approved character and location sheet\")\n\n    previous\
+          \ = current_version(context.get(\"currentTarget\"))\n    current = previous[\"\
+          content\"] if previous else None\n    if current:\n        current = dict(current)\n\
+          \        current[\"pages\"] = [{key: value for key, value in page.items()\
+          \ if key != \"pageId\"} for page in current[\"pages\"]]\n    changed = (context.get(\"\
+          currentTarget\") or {}).get(\"state\") == \"needs_review\"\n    count =\
+          \ {\"playful_kid\": 3, \"enthusiast_parent\": 5, \"professional_creator\"\
+          : 8}[persona]\n    pages = []\n    for page_index in range(count + 1):\n\
+          \        panel_count = 2 if (persona == \"enthusiast_parent\" and page_index\
+          \ == 3) or (persona == \"professional_creator\" and page_index in (3, 6))\
+          \ else 1\n        panels = []\n        for panel_index in range(panel_count):\n\
+          \            selected = [] if page_index == 0 else [unit for index, unit\
+          \ in enumerate(units) if index * count // len(units) + 1 == page_index]\n\
+          \            if page_index and not selected:\n                selected =\
+          \ [units[(page_index - 1) * len(units) // count]]\n            subjects\
+          \ = {\"character:\" + character for unit in selected for character in unit[\"\
+          charactersPresent\"]}\n            subjects.update(\"location:\" + unit[\"\
+          locationId\"] for unit in selected)\n            routed = [] if page_index\
+          \ == 0 else [item for item in references if item[\"subjectKind\"] + \":\"\
+          \ + item[\"subjectId\"] in subjects]\n            if page_index and len(routed)\
+          \ != len(subjects):\n                raise ValueError(\"J11 manuscript subjects\
+          \ lack approved sheets\")\n            panels.append({\"panelKey\": \"panel_\"\
+          \ + str(panel_index + 1), \"manuscriptUnitIds\": [unit[\"unitId\"] for unit\
+          \ in selected],\n                           \"textCapacity\": 80 if page_index\
+          \ == 0 else 120 if persona == \"playful_kid\" else 180,\n              \
+          \             \"liveTextSafeRegion\": {\"x\": 0.1, \"y\": 0.1, \"width\"\
+          : 0.8, \"height\": 0.8},\n                           \"sheetReferences\"\
+          : routed, \"deferredCompositionDecisions\": []})\n        rhythm = \"Cover\
+          \ invites the first story page.\" if page_index == 0 else \"Resolve the\
+          \ story before the final turn.\" if page_index == count else \"Carry the\
+          \ action into the next page.\"\n        pages.append({\"pageIndex\": page_index,\
+          \ \"pageTurnRhythm\": rhythm, \"panels\": panels})\n    if current and not\
+          \ changed:\n        pages = current[\"pages\"]\n    elif current:\n    \
+          \    for page in pages:\n            saved = current[\"pages\"][page[\"\
+          pageIndex\"]]\n            if len(saved[\"panels\"]) == len(page[\"panels\"\
+          ]):\n                page[\"pageTurnRhythm\"] = saved[\"pageTurnRhythm\"\
+          ]\n                for panel, prior in zip(page[\"panels\"], saved[\"panels\"\
+          ]):\n                    for key in (\"panelKey\", \"textCapacity\", \"\
+          liveTextSafeRegion\", \"deferredCompositionDecisions\"):\n             \
+          \           panel[key] = prior[key]\n    revision = (context.get(\"matchingRevision\"\
+          ) or {}).get(\"instruction\")\n    answers = [item[\"question\"] + \": \"\
+          \ + item[\"answer\"] for item in context.get(\"questionAnswers\", []) if\
+          \ item.get(\"answer\") and item.get(\"taskId\") in (None, \"J11\")]\n  \
+          \  decisions = list((current or {}).get(\"deferredCompositionDecisions\"\
+          , []))\n    for note in answers + ([\"Revision request: \" + revision] if\
+          \ revision else []):\n        if note not in decisions:\n            decisions.append(note)\n\
+          \    margins = lambda amount: {\"top\": amount, \"right\": amount, \"bottom\"\
+          : amount, \"left\": amount, \"unit\": \"mm\"}\n    canvas = {\"trim\": {\"\
+          width\": 210, \"height\": 210, \"unit\": \"mm\"}, \"orientation\": \"square\"\
+          , \"aspectRatio\": {\"width\": 1, \"height\": 1},\n              \"workingPixels\"\
+          : {\"width\": 2048, \"height\": 2048}, \"bleed\": margins(3),\n        \
+          \      \"binding\": {\"edge\": \"left\", \"allowance\": 8, \"unit\": \"\
+          mm\"},\n              \"liveTextSafeMargins\": {\"top\": 12, \"right\":\
+          \ 12, \"bottom\": 12, \"left\": 16, \"unit\": \"mm\"}, \"readingDirection\"\
+          : \"left_to_right\"}\n    typography = [{\"kind\": kind, \"fontDirection\"\
+          : \"Clear, rounded lettering with high contrast.\",\n                  \
+          \ \"sizeHierarchy\": \"Largest display size.\" if kind == \"title\" else\
+          \ \"Readable story size.\",\n                   \"containerTreatment\":\
+          \ \"Rounded bubble with a clear tail.\" if kind in (\"speech\", \"thought\"\
+          ) else \"Quiet open or caption space.\",\n                   \"placementRules\"\
+          : \"Place inside the live text safe region, clear of faces and actions.\"\
+          }\n                  for kind in (\"narration\", \"speech\", \"thought\"\
+          , \"sound_effect\", \"title\", \"credit\", \"diegetic\")]\n    content =\
+          \ {\"schemaVersion\": \"2\", \"title\": (current or {}).get(\"title\", manuscript[\"\
+          title\"]),\n               \"canvas\": (current or {}).get(\"canvas\", canvas),\
+          \ \"typography\": (current or {}).get(\"typography\", typography),\n   \
+          \            \"pages\": pages, \"deferredCompositionDecisions\": decisions,\n\
+          \               \"approvalQuestions\": (current or {}).get(\"approvalQuestions\"\
+          , [\"Does the page rhythm and lettering space suit this story?\"])}\n  \
+          \  return proposal(\"J11\", content)\n\n\ndef fixture(context):\n    role\
+          \ = context[\"role\"]\n    if role == \"manager\" and context.get(\"eligibleRoute\"\
+          ) == \"J11\":\n        return {\"kind\": \"delegate\", \"payload\": {\"\
+          taskId\": \"J11\", \"subjectKind\": \"book\", \"subjectId\": context[\"\
+          run\"][\"bookletId\"]}}\n    if role == \"specialist\" and context.get(\"\
+          taskId\") == \"J11\":\n        return pagination_fixture(context)\n    return\
+          \ M2_FIXTURE(context)\n\n\"\"\"Local M3 J12 simulation extension; append\
+          \ after m2-simulation and m3-pagination.\"\"\"\n\nM3_PAGINATION_FIXTURE\
+          \ = fixture\n\n\ndef page_bible_fixture(context):\n    material_question\
+          \ = context.get(\"materialQuestion\")\n    if material_question and not\
+          \ any(item.get(\"answer\") and item.get(\"taskId\") in (None, \"J12\") and\n\
+          \                                     item.get(\"question\") == material_question\
+          \ for item in context.get(\"questionAnswers\", [])):\n        return {\"\
+          kind\": \"clarification\", \"payload\": {\"question\": material_question}}\n\
+          \    persona = context[\"persona\"]\n    story = CASES.get(persona)\n  \
+          \  if not story or context.get(\"brief\") != story[\"brief\"]:\n       \
+          \ raise ValueError(\"Fixed case brief differs\")\n    rows = context.get(\"\
+          approvedSources\") or []\n\n    def source_row(task):\n        matches =\
+          \ [row for row in rows if row.get(\"taskId\") == task]\n        if len(matches)\
+          \ != 1 or not uuid(matches[0].get(\"id\")):\n            raise ValueError(\"\
+          J12 requires one identified source \" + task)\n        return matches[0]\n\
+          \n    layout_source, manuscript_source, style_source = (source_row(task)\
+          \ for task in (\"J11\", \"J05\", \"J08\"))\n    layout, manuscript = layout_source[\"\
+          content\"], manuscript_source[\"content\"]\n    page_id = context.get(\"\
+          subjectId\")\n    if context.get(\"subjectKind\") != \"page\" or not uuid(page_id):\n\
+          \        raise ValueError(\"J12 requires a saved page identity\")\n    matches\
+          \ = [page for page in layout[\"pages\"] if page.get(\"pageId\") == page_id]\n\
+          \    if len(matches) != 1:\n        raise ValueError(\"J12 selected page\
+          \ is missing from J11\")\n    page = matches[0]\n    if not isinstance(page.get(\"\
+          pageIndex\"), int) or page[\"pageIndex\"] < 0 or page[\"pageIndex\"] > {\"\
+          playful_kid\": 3, \"enthusiast_parent\": 5, \"professional_creator\": 8}[persona]:\n\
+          \        raise ValueError(\"J12 page index is invalid\")\n    units = manuscript[\"\
+          units\"]\n    if any(not uuid(unit.get(\"unitId\")) for unit in units):\n\
+          \        raise ValueError(\"J12 requires saved manuscript units\")\n   \
+          \ first_panel = {}\n    for item in layout[\"pages\"][1:]:\n        for\
+          \ panel in item[\"panels\"]:\n            for unit_id in panel[\"manuscriptUnitIds\"\
+          ]:\n                first_panel.setdefault(unit_id, item[\"pageId\"] + \"\
+          :\" + panel[\"panelKey\"])\n    sheet_rows = {(row.get(\"subjectKind\"),\
+          \ row.get(\"subjectId\"), row.get(\"id\")): row for row in rows if row.get(\"\
+          taskId\") in (\"J09\", \"J10\")}\n    for panel in page[\"panels\"]:\n \
+          \       for ref in panel[\"sheetReferences\"]:\n            if not all(uuid(ref.get(key))\
+          \ for key in (\"subjectId\", \"artifactVersionId\", \"assetId\")):\n   \
+          \             raise ValueError(\"J12 reference identity is invalid\")\n\
+          \            row = sheet_rows.get((ref.get(\"subjectKind\"), ref[\"subjectId\"\
+          ], ref[\"artifactVersionId\"]))\n            if not row or row.get(\"content\"\
+          , {}).get(\"build\", {}).get(\"assetId\") != ref[\"assetId\"]:\n       \
+          \         raise ValueError(\"J12 reference source differs\")\n    previous\
+          \ = current_version(context.get(\"currentTarget\"))\n    changed = (context.get(\"\
+          currentTarget\") or {}).get(\"state\") == \"needs_review\"\n    current\
+          \ = previous[\"content\"] if previous and not changed else None\n    if\
+          \ current and (current.get(\"pageId\") != page_id or current.get(\"layoutVersionId\"\
+          ) != layout_source[\"id\"] or\n                    current.get(\"manuscriptVersionId\"\
+          ) != manuscript_source[\"id\"] or current.get(\"styleVersionId\") != style_source[\"\
+          id\"] or\n                    current.get(\"pageIndex\") != page[\"pageIndex\"\
+          ] or len(current.get(\"panels\", [])) != len(page[\"panels\"])):\n     \
+          \   raise ValueError(\"J12 current page differs from sources\")\n    typography\
+          \ = {item[\"kind\"]: item for item in layout[\"typography\"]}\n\n    def\
+          \ line(kind, value, speaker, panel_key):\n        treatment = typography[kind]\n\
+          \        return {\"kind\": kind, \"text\": value, \"form\": \"display\"\
+          \ if kind == \"title\" else \"bubble\" if kind == \"speech\" else \"caption\"\
+          ,\n                \"speakerEntityId\": speaker, \"panelKey\": panel_key,\n\
+          \                \"placement\": \"Inside the approved live text safe region,\
+          \ clear of faces and action.\",\n                \"typographyTreatment\"\
+          : treatment[\"fontDirection\"] + \" \" + treatment[\"sizeHierarchy\"],\n\
+          \                \"bubbleTreatment\": treatment[\"containerTreatment\"]}\n\
+          \n    revision = (context.get(\"matchingRevision\") or {}).get(\"instruction\"\
+          )\n    answers = [item[\"question\"] + \": \" + item[\"answer\"] for item\
+          \ in context.get(\"questionAnswers\", [])\n               if item.get(\"\
+          answer\") and item.get(\"taskId\") in (None, \"J12\")]\n    panels = []\n\
+          \    for index, panel in enumerate(page[\"panels\"]):\n        routed =\
+          \ []\n        for unit_id in panel[\"manuscriptUnitIds\"]:\n           \
+          \ found = [unit for unit in units if unit[\"unitId\"] == unit_id]\n    \
+          \        if len(found) != 1:\n                raise ValueError(\"J12 routes\
+          \ an unknown manuscript unit\")\n            routed.append(found[0])\n \
+          \       key = panel[\"panelKey\"]\n        prior = current[\"panels\"][index]\
+          \ if current else None\n        if prior and (prior.get(\"panelKey\") !=\
+          \ key or prior.get(\"manuscriptUnitIds\") != panel[\"manuscriptUnitIds\"\
+          ] or\n                      sorted(prior.get(\"sheetReferences\", []), key=str)\
+          \ != sorted(panel[\"sheetReferences\"], key=str)):\n            raise ValueError(\"\
+          J12 current panel routing differs\")\n        lettering = (prior[\"lettering\"\
+          ] if prior else [line(\"title\", layout[\"title\"], None, key)] if page[\"\
+          pageIndex\"] == 0 and index == 0 else\n                     [entry for unit\
+          \ in routed if first_panel.get(unit[\"unitId\"]) == page_id + \":\" + key\n\
+          \                      for entry in [line(\"narration\", unit[\"narration\"\
+          ], None, key)] +\n                      [line(\"speech\", dialogue[\"text\"\
+          ], dialogue[\"speakerId\"], key) for dialogue in unit[\"dialogue\"]]])\n\
+          \        refs = panel[\"sheetReferences\"]\n        composition = (prior[\"\
+          composition\"] if prior else \"Use the approved sheet references, panel\
+          \ allocation and clear focal action.\") + (\" Revision request: \" + revision\
+          \ if revision else \"\")\n        panels.append({\"panelKey\": key, \"manuscriptUnitIds\"\
+          : panel[\"manuscriptUnitIds\"], \"sheetReferences\": refs,\n           \
+          \            \"actionBeat\": prior[\"actionBeat\"] if prior else \" \".join(unit[\"\
+          action\"] for unit in routed) or \"Present the approved cover title.\",\n\
+          \                       \"emotionalBeat\": prior[\"emotionalBeat\"] if prior\
+          \ else \"Keep the fixed brief's emotional promise clear.\",\n          \
+          \             \"composition\": composition,\n                       \"characterIds\"\
+          : [ref[\"subjectId\"] for ref in refs if ref[\"subjectKind\"] == \"character\"\
+          ],\n                       \"locationIds\": [ref[\"subjectId\"] for ref\
+          \ in refs if ref[\"subjectKind\"] == \"location\"],\n                  \
+          \     \"lettering\": lettering, \"noText\": len(lettering) == 0})\n    content\
+          \ = {\"schemaVersion\": \"2\", \"pageId\": page_id, \"pageIndex\": page[\"\
+          pageIndex\"], \"layoutVersionId\": layout_source[\"id\"],\n            \
+          \   \"manuscriptVersionId\": manuscript_source[\"id\"], \"styleVersionId\"\
+          : style_source[\"id\"], \"panels\": panels,\n               \"reviewQuestions\"\
+          : (current[\"reviewQuestions\"] if current else [\"Does this page preserve\
+          \ the approved story and lettering?\"]) + answers}\n    return proposal(\"\
+          J12\", content)\n\n\ndef fixture(context):\n    if context.get(\"role\"\
+          ) == \"manager\" and context.get(\"eligibleRoute\") == \"J12\":\n      \
+          \  target = context.get(\"eligibleTarget\") or {}\n        if target.get(\"\
+          taskId\") != \"J12\" or target.get(\"subjectKind\") != \"page\" or not uuid(target.get(\"\
+          subjectId\")):\n            raise ValueError(\"Manager has no eligible page\
+          \ subject\")\n        return {\"kind\": \"delegate\", \"payload\": {\"taskId\"\
+          : \"J12\", \"subjectKind\": \"page\", \"subjectId\": target[\"subjectId\"\
+          ]}}\n    if context.get(\"role\") == \"specialist\" and context.get(\"taskId\"\
+          ) == \"J12\":\n        return page_bible_fixture(context)\n    return M3_PAGINATION_FIXTURE(context)\n\
+          \n\"\"\"Model-free final-page routing extension; older profiles remain unchanged.\"\
+          \"\"\n\nM3_PAGE_BIBLE_FIXTURE = fixture\n\n\ndef report_fixture(context):\n\
+          \    evidence = context.get(\"reportEvidence\") or {}\n    role = context.get(\"\
+          role\")\n    versions = evidence.get(\"versionIds\")\n    count = evidence.get(\"\
+          warningCount\")\n    if (role not in (\"tester\", \"judge\") or evidence.get(\"\
+          mode\") != \"simulated\" or\n            not uuid(evidence.get(\"runId\"\
+          )) or not isinstance(versions, list) or\n            not 1 <= len(versions)\
+          \ <= 100 or len(set(versions)) != len(versions) or\n            any(not\
+          \ uuid(value) for value in versions) or type(count) is not int or count\
+          \ < 0 or\n            not isinstance(evidence.get(\"configurationHash\"\
+          ), str) or\n            not re.fullmatch(r\"[a-f0-9]{64}\", evidence[\"\
+          configurationHash\"])):\n        raise ValueError(\"Invalid simulated report\
+          \ evidence\")\n    unassessed = {\"status\": \"not_assessed\", \"explanation\"\
+          : \"Deterministic simulation does not assess creative quality or human usability.\"\
+          }\n    report = {\"schemaVersion\": \"2\", \"role\": role, \"mode\": \"\
+          simulated\", \"runId\": evidence[\"runId\"],\n              \"configurationHash\"\
+          : evidence[\"configurationHash\"],\n              \"summary\": f\"Deterministic\
+          \ {role} report retains {len(versions)} artifact versions and {count} recorded\
+          \ warnings. No quality gate or regeneration is requested.\",\n         \
+          \     \"intent\": unassessed, \"consistency\": unassessed, \"interaction\"\
+          : unassessed,\n              \"costEvidence\": {\"status\": \"unavailable\"\
+          , \"actualUsd\": None, \"estimatedUsd\": None,\n                       \
+          \        \"explanation\": \"This model-free report has no provider billing\
+          \ evidence; application usage counters are retained separately.\"},\n  \
+          \            \"findings\": [{\"category\": \"consistency\", \"target\":\
+          \ {\"kind\": \"run\", \"runId\": evidence[\"runId\"]},\n               \
+          \             \"explanation\": f\"{count} warnings remain in the saved artifact\
+          \ evidence. They do not request regeneration or prevent completion.\"}]\
+          \ if count else [],\n              \"evidence\": {\"versionIds\": versions,\
+          \ \"inspectedAssetIds\": []}}\n    return {\"kind\": \"feedback\" if role\
+          \ == \"tester\" else \"assessment\", \"payload\": report}\n\n\ndef fixture(context):\n\
+          \    if context.get(\"role\") in (\"tester\", \"judge\") and context.get(\"\
+          reportEvidence\"):\n        return report_fixture(context)\n    if context.get(\"\
+          role\") == \"manager\" and context.get(\"eligibleRoute\") == \"J13\":\n\
+          \        target = context.get(\"eligibleTarget\") or {}\n        if (target.get(\"\
+          taskId\") != \"J13\" or target.get(\"kind\") != \"image\" or\n         \
+          \       target.get(\"subjectKind\") != \"page\" or not uuid(target.get(\"\
+          subjectId\"))):\n            raise ValueError(\"Manager has no eligible\
+          \ final-page image subject\")\n        return {\"kind\": \"delegate\", \"\
+          payload\": {\"taskId\": \"J13\", \"subjectKind\": \"page\",\n          \
+          \                                        \"subjectId\": target[\"subjectId\"\
+          ]}}\n    result = M3_PAGE_BIBLE_FIXTURE(context)\n    if context.get(\"\
+          role\") == \"tester\" and context.get(\"persona\") != \"professional_creator\"\
+          :\n        decision = result.get(\"payload\", {}).get(\"decision\", {})\n\
+          \        grant = context.get(\"activeDelegation\") or {}\n        accepted\
+          \ = decision.get(\"versionIds\", [])\n        if (decision.get(\"action\"\
+          ) == \"approve\" and \"J13\" in grant.get(\"taskIds\", []) and\n       \
+          \         any(item.get(\"taskId\") == \"J13\" and item.get(\"currentVersionId\"\
+          ) in accepted\n                    for item in context.get(\"currentArtifacts\"\
+          , []))):\n            return {\"kind\": \"decision\", \"payload\": {\"decision\"\
+          : {\"action\": \"delegate\",\n                    \"taskIds\": grant[\"\
+          taskIds\"], \"subjectId\": context[\"bookletId\"]}}}\n    return result\n\
+          \n\ndef main(authorization_body, run_id, operation_id, workflow_run_id,\
+          \ parent_workflow_run_id):\n    data = json.loads(authorization_body)[\"\
+          data\"]\n    if data.get(\"started\") is True:\n        ctx = data[\"context\"\
+          ]\n        if ctx.get(\"role\") != \"specialist\":\n            raise ValueError(\"\
+          Wrong module role\")\n        if ctx.get(\"taskId\") != \"J12\":\n     \
+          \       raise ValueError(\"Wrong specialist task\")\n    return simulation_main(authorization_body,\
+          \ run_id, operation_id, workflow_run_id, parent_workflow_run_id)\n"
+        code_language: python3
+        outputs:
+          authorization_reason:
+            children: null
+            type: string
+          booklet_result:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: Simulate J12
+        type: code
+        variables:
+        - value_selector:
+          - authorize
+          - body
+          variable: authorization_body
+        - value_selector:
+          - start
+          - run_id
+          variable: run_id
+        - value_selector:
+          - start
+          - operation_id
+          variable: operation_id
+        - value_selector:
+          - sys
+          - workflow_run_id
+          variable: workflow_run_id
+        - value_selector:
+          - start
+          - parent_workflow_run_id
+          variable: parent_workflow_run_id
+      id: simulate
+      position:
+        x: 840
+        y: 0
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: not empty
+            id: has-result
+            value: ''
+            varType: string
+            variable_selector:
+            - simulate
+            - booklet_result
+          logical_operator: and
+        title: Save only an authorized result
+        type: if-else
+      id: authorized
+      position:
+        x: 1120
+        y: 0
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - type: text
+            value: '{{#simulate.booklet_result#}}'
+          type: raw-text
+        headers: 'Content-Type:application/json
+
+          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
+        method: post
+        params: ''
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        ssl_verify: true
+        timeout:
+          connect: 10
+          read: 30
+          write: 30
+        title: Save original result in Booklet
+        type: http-request
+        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/result'
+      id: save
+      position:
+        x: 1400
+        y: 0
+      type: custom
+    - data:
+        code: "import json\n\ndef main(body, status_code, booklet_result):\n    data\
+          \ = json.loads(body).get('data', {})\n    if status_code != 200 or data.get('state')\
+          \ != 'succeeded':\n        raise ValueError('Booklet did not confirm saved\
+          \ completion')\n    return {'booklet_result': booklet_result, 'authorization_reason':\
+          \ ''}\n"
+        code_language: python3
+        outputs:
+          authorization_reason:
+            children: null
+            type: string
+          booklet_result:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: Require Booklet saved completion
+        type: code
+        variables:
+        - value_selector:
+          - save
+          - body
+          variable: body
+        - value_selector:
+          - save
+          - status_code
+          variable: status_code
+        - value_selector:
+          - simulate
+          - booklet_result
+          variable: booklet_result
+      id: ack
+      position:
+        x: 1680
+        y: 0
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - ack
+          - booklet_result
+          value_type: string
+          variable: booklet_result
+        title: Saved completion
+        type: end
+      id: finish
+      position:
+        x: 1960
+        y: 0
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - simulate
+          - authorization_reason
+          value_type: string
+          variable: authorization_reason
+        title: Paused without execution
+        type: end
+      id: paused
+      position:
+        x: 1400
+        y: 300
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: m4_mode-match
+            value: simulated
+            varType: string
+            variable_selector:
+            - start
+            - mode
+          logical_operator: and
+        title: m4_mode
+        type: if-else
+      id: m4_mode
+      position:
+        x: 1120
+        y: 600
+      type: custom
+    - data:
+        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
+          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'balanced':\n\
+          \        raise ValueError('This branch supports Balanced only')\n    for\
+          \ value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n\
+          \    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n\
+          \    return {'identity_json': json.dumps({'runId': run_id, 'operationId':\
+          \ operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
+          \ parent_workflow_run_id or None})}\n"
+        code_language: python3
+        outputs:
+          identity_json:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: Validate Balanced identity
+        type: code
+        variables:
+        - value_selector:
+          - start
+          - run_id
+          variable: run_id
+        - value_selector:
+          - start
+          - operation_id
+          variable: operation_id
+        - value_selector:
+          - sys
+          - workflow_run_id
+          variable: workflow_run_id
+        - value_selector:
+          - start
+          - parent_workflow_run_id
+          variable: parent_workflow_run_id
+        - value_selector:
+          - start
+          - mode
+          variable: mode
+      id: m4_identity
+      position:
+        x: 280
+        y: 0
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - type: text
+            value: '{{#m4_identity.identity_json#}}'
+          type: raw-text
+        headers: 'Content-Type:application/json
+
+          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
+        method: post
+        params: ''
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        ssl_verify: true
+        timeout:
+          connect: 10
+          read: 30
+          write: 30
+        title: Claim the prepared Balanced request once
+        type: http-request
+        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
+      id: m4_authorize
+      position:
+        x: 560
+        y: 0
+      type: custom
+    - data:
+        code: "import hashlib\nimport json\nimport math\nimport re\nimport time\n\n\
+          def main(authorization_body, status_code):\n    if status_code != 200 or\
+          \ not isinstance(authorization_body, str) or len(authorization_body.encode('utf-8'))\
+          \ > 1048576:\n        raise ValueError('Booklet authorization transport\
+          \ failed')\n    data = json.loads(authorization_body).get('data')\n    if\
+          \ not isinstance(data, dict):\n        raise ValueError('Booklet authorization\
+          \ envelope is missing')\n    result = {'request_%02d' % index: '' for index\
+          \ in range(32)}\n    result.update(authorized='', authorization_reason='',\
+          \ report='', digest='', timeout_seconds=0, deadline_at_ms=0)\n    if data.get('started')\
+          \ is not True:\n        reason = data.get('reason')\n        if data.get('started')\
+          \ is not False or not isinstance(reason, str) or not reason or len(reason)\
+          \ > 1024:\n            raise ValueError('Booklet authorization denial is\
+          \ invalid')\n        result['authorization_reason'] = reason\n        return\
+          \ result\n    if data.get('mode') != 'balanced' or data.get('role') != \"\
+          specialist\" or data.get('taskId') != \"J12\":\n        raise ValueError('Booklet\
+          \ authorization role differs')\n    if not isinstance(data.get('inputFingerprint'),\
+          \ str) or not re.fullmatch('[0-9a-f]{64}', data['inputFingerprint']):\n\
+          \        raise ValueError('Booklet authorization fingerprint is missing')\n\
+          \    prepared = data.get('m4')\n    if not isinstance(prepared, dict) or\
+          \ type(prepared.get('report')) is not bool:\n        raise ValueError('Booklet\
+          \ preparation is missing')\n    report = prepared['report']\n    if report:\n\
+          \        raise ValueError('Booklet report route differs')\n    request =\
+          \ prepared.get('requestJson')\n    digest = prepared.get('requestDigest')\n\
+          \    seconds = prepared.get('timeoutSeconds')\n    deadline = prepared.get('deadlineAtMs')\n\
+          \    if not isinstance(request, str) or not request or '\\x00' in request\
+          \ or len(request) > 32 * 65536:\n        raise ValueError('Booklet prepared\
+          \ carrier exceeds its limit')\n    if not isinstance(digest, str) or not\
+          \ re.fullmatch('[0-9a-f]{64}', digest):\n        raise ValueError('Booklet\
+          \ prepared digest is missing')\n    if type(seconds) not in (int, float)\
+          \ or not math.isfinite(seconds) or not 0 < seconds <= 120:\n        raise\
+          \ ValueError('Booklet remaining timeout is invalid')\n    if type(deadline)\
+          \ is not int or not 0 < deadline <= 9007199254740991 or deadline <= time.time()\
+          \ * 1000:\n        raise ValueError('Booklet original deadline expired')\n\
+          \    payload = json.loads(request)\n    canonical = json.dumps(payload,\
+          \ sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)\n\
+          \    if request != canonical or hashlib.sha256(request.encode('utf-8')).hexdigest()\
+          \ != digest:\n        raise ValueError('Booklet prepared bytes differ')\n\
+          \    for index in range(32):\n        result['request_%02d' % index] = request[index\
+          \ * 65536:(index + 1) * 65536]\n    result.update(authorized='yes', report='yes'\
+          \ if report else 'no', digest='sha256:' + digest,\n                  timeout_seconds=seconds,\
+          \ deadline_at_ms=deadline)\n    return result\n"
+        code_language: python3
+        outputs:
+          authorization_reason:
+            children: null
+            type: string
+          authorized:
+            children: null
+            type: string
+          deadline_at_ms:
+            children: null
+            type: number
+          digest:
+            children: null
+            type: string
+          report:
+            children: null
+            type: string
+          request_00:
+            children: null
+            type: string
+          request_01:
+            children: null
+            type: string
+          request_02:
+            children: null
+            type: string
+          request_03:
+            children: null
+            type: string
+          request_04:
+            children: null
+            type: string
+          request_05:
+            children: null
+            type: string
+          request_06:
+            children: null
+            type: string
+          request_07:
+            children: null
+            type: string
+          request_08:
+            children: null
+            type: string
+          request_09:
+            children: null
+            type: string
+          request_10:
+            children: null
+            type: string
+          request_11:
+            children: null
+            type: string
+          request_12:
+            children: null
+            type: string
+          request_13:
+            children: null
+            type: string
+          request_14:
+            children: null
+            type: string
+          request_15:
+            children: null
+            type: string
+          request_16:
+            children: null
+            type: string
+          request_17:
+            children: null
+            type: string
+          request_18:
+            children: null
+            type: string
+          request_19:
+            children: null
+            type: string
+          request_20:
+            children: null
+            type: string
+          request_21:
+            children: null
+            type: string
+          request_22:
+            children: null
+            type: string
+          request_23:
+            children: null
+            type: string
+          request_24:
+            children: null
+            type: string
+          request_25:
+            children: null
+            type: string
+          request_26:
+            children: null
+            type: string
+          request_27:
+            children: null
+            type: string
+          request_28:
+            children: null
+            type: string
+          request_29:
+            children: null
+            type: string
+          request_30:
+            children: null
+            type: string
+          request_31:
+            children: null
+            type: string
+          timeout_seconds:
+            children: null
+            type: number
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: m4_decode
+        type: code
+        variables:
+        - value_selector:
+          - m4_authorize
+          - body
+          variable: authorization_body
+        - value_selector:
+          - m4_authorize
+          - status_code
+          variable: status_code
+      id: m4_decode
+      position:
+        x: 840
+        y: 600
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: m4_authorized-match
+            value: 'yes'
+            varType: string
+            variable_selector:
+            - m4_decode
+            - authorized
+          logical_operator: and
+        title: m4_authorized
+        type: if-else
+      id: m4_authorized
+      position:
+        x: 1120
+        y: 600
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - m4_decode
+          - authorization_reason
+          value_type: string
+          variable: authorization_reason
+        title: m4_paused
+        type: end
+      id: m4_paused
+      position:
+        x: 1960
+        y: 600
+      type: custom
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        memory: null
+        model:
+          completion_params:
+            booklet_bounded_execution: true
+            booklet_deadline_at_ms: '{{#m4_decode.deadline_at_ms#}}'
+            booklet_prepared_request: true
+            booklet_request_digest: '{{#m4_decode.digest#}}'
+            booklet_timeout_seconds: '{{#m4_decode.timeout_seconds#}}'
+            enable_stream: false
+            max_tokens: 8192
+            reasoning_effort: low
+            reasoning_mode: standard
+            service_tier: default
+          mode: chat
+          name: gpt-6-luna
+          provider: langgenius/openai/openai
+        prompt_config:
+          jinja2_variables: []
+        prompt_template:
+        - edition_type: basic
+          role: user
+          text: '{{#m4_decode.request_00#}}{{#m4_decode.request_01#}}{{#m4_decode.request_02#}}{{#m4_decode.request_03#}}{{#m4_decode.request_04#}}{{#m4_decode.request_05#}}{{#m4_decode.request_06#}}{{#m4_decode.request_07#}}{{#m4_decode.request_08#}}{{#m4_decode.request_09#}}{{#m4_decode.request_10#}}{{#m4_decode.request_11#}}{{#m4_decode.request_12#}}{{#m4_decode.request_13#}}{{#m4_decode.request_14#}}{{#m4_decode.request_15#}}{{#m4_decode.request_16#}}{{#m4_decode.request_17#}}{{#m4_decode.request_18#}}{{#m4_decode.request_19#}}{{#m4_decode.request_20#}}{{#m4_decode.request_21#}}{{#m4_decode.request_22#}}{{#m4_decode.request_23#}}{{#m4_decode.request_24#}}{{#m4_decode.request_25#}}{{#m4_decode.request_26#}}{{#m4_decode.request_27#}}{{#m4_decode.request_28#}}{{#m4_decode.request_29#}}{{#m4_decode.request_30#}}{{#m4_decode.request_31#}}'
+        reasoning_format: separated
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        structured_output_enabled: false
+        title: specialist result
+        type: llm
+        vision:
+          enabled: false
+      id: m4_llm
+      position:
+        x: 1400
+        y: 600
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - m4_llm
+          - text
+          value_type: string
+          variable: booklet_provider_result
+        title: m4_llm-finish
+        type: end
+      id: m4_llm-finish
+      position:
+        x: 1960
+        y: 600
+      type: custom
+    - data:
+        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
+          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'real':\n\
+          \        raise ValueError('This branch supports Real only')\n    for value\
+          \ in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n   \
+          \ if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n   \
+          \ return {'identity_json': json.dumps({'runId': run_id, 'operationId': operation_id,\
+          \ 'workflowRunId': workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id\
+          \ or None})}\n"
+        code_language: python3
+        outputs:
+          identity_json:
+            children: null
+            type: string
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: Validate Real identity
+        type: code
+        variables:
+        - value_selector:
+          - start
+          - run_id
+          variable: run_id
+        - value_selector:
+          - start
+          - operation_id
+          variable: operation_id
+        - value_selector:
+          - sys
+          - workflow_run_id
+          variable: workflow_run_id
+        - value_selector:
+          - start
+          - parent_workflow_run_id
+          variable: parent_workflow_run_id
+        - value_selector:
+          - start
+          - mode
+          variable: mode
+      id: real_identity
+      position:
+        x: 280
+        y: 0
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: real_mode-match
+            value: real
+            varType: string
+            variable_selector:
+            - start
+            - mode
+          logical_operator: and
+        title: real_mode
+        type: if-else
+      id: real_mode
+      position:
+        x: 250
+        y: 600
+      type: custom
+    - data:
+        authorization:
+          type: no-auth
+        body:
+          data:
+          - type: text
+            value: '{{#real_identity.identity_json#}}'
+          type: raw-text
+        headers: 'Content-Type:application/json
+
+          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
+        method: post
+        params: ''
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        ssl_verify: true
+        timeout:
+          connect: 10
+          read: 30
+          write: 30
+        title: Claim the prepared Real request once
+        type: http-request
+        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
+      id: real_authorize
+      position:
+        x: 560
+        y: 0
+      type: custom
+    - data:
+        code: "import hashlib\nimport json\nimport math\nimport re\nimport time\n\n\
+          def canonical(value):\n    return json.dumps(value, sort_keys=True, separators=(',',\
+          \ ':'), ensure_ascii=False, allow_nan=False)\n\ndef main(authorization_body,\
+          \ status_code):\n    if status_code != 200 or not isinstance(authorization_body,\
+          \ str) or len(authorization_body.encode('utf-8')) > 1048576:\n        raise\
+          \ ValueError('Booklet authorization transport failed')\n    data = json.loads(authorization_body).get('data')\n\
+          \    if not isinstance(data, dict):\n        raise ValueError('Booklet authorization\
+          \ envelope is missing')\n    result = {'request_%02d' % i: '' for i in range(32)}\n\
+          \    result.update(authorized='', authorization_reason='', report='', digest='',\
+          \ timeout_seconds=0, deadline_at_ms=0,\n                  token_policy_version='',\
+          \ token_policy_hash='', max_input_tokens=0, warning_input_tokens=0)\n  \
+          \  if data.get('started') is not True:\n        reason = data.get('reason')\n\
+          \        if data.get('started') is not False or not isinstance(reason, str)\
+          \ or not reason or len(reason) > 1024:\n            raise ValueError('Booklet\
+          \ authorization denial is invalid')\n        result['authorization_reason']\
+          \ = reason\n        return result\n    if data.get('mode') != 'real' or\
+          \ data.get('role') != \"specialist\" or data.get('taskId') != \"J12\":\n\
+          \        raise ValueError('Booklet authorization role differs')\n    if\
+          \ not isinstance(data.get('inputFingerprint'), str) or not re.fullmatch('[0-9a-f]{64}',\
+          \ data['inputFingerprint']):\n        raise ValueError('Booklet fingerprint\
+          \ is missing')\n    prepared = data.get('m4')\n    if not isinstance(prepared,\
+          \ dict) or type(prepared.get('report')) is not bool:\n        raise ValueError('Booklet\
+          \ preparation is missing')\n    report = prepared['report']\n    if report:\n\
+          \        raise ValueError('Booklet report route differs')\n    request =\
+          \ prepared.get('requestJson')\n    digest = prepared.get('requestDigest')\n\
+          \    seconds = prepared.get('timeoutSeconds')\n    deadline = prepared.get('deadlineAtMs')\n\
+          \    if not isinstance(request, str) or not request or '\\x00' in request\
+          \ or len(request) > 32 * 65536:\n        raise ValueError('Booklet prepared\
+          \ carrier exceeds its limit')\n    if not isinstance(digest, str) or not\
+          \ re.fullmatch('[0-9a-f]{64}', digest):\n        raise ValueError('Booklet\
+          \ digest is missing')\n    if type(seconds) not in (int, float) or not math.isfinite(seconds)\
+          \ or not 0 < seconds <= 120:\n        raise ValueError('Booklet remaining\
+          \ timeout is invalid')\n    if type(deadline) is not int or not 0 < deadline\
+          \ <= 9007199254740991 or deadline <= time.time() * 1000:\n        raise\
+          \ ValueError('Booklet original deadline expired')\n    payload = json.loads(request)\n\
+          \    if request != canonical(payload):\n        raise ValueError('Booklet\
+          \ prepared bytes differ')\n    if report:\n        if payload.get('schemaVersion')\
+          \ != 'booklet_real_report_carrier_v1' or payload.get('adapterIdentity')\
+          \ != 'm5-openai-bounded@1' or payload.get('finalRequestDigest') != digest\
+          \ or not isinstance(payload.get('orderedImages'), list) or not 1 <= len(payload['orderedImages'])\
+          \ <= 15 or hashlib.sha256(canonical(payload['orderedImages']).encode()).hexdigest()\
+          \ != payload.get('manifestDigest') or not isinstance(payload.get('textRequestJson'),\
+          \ str) or hashlib.sha256(payload['textRequestJson'].encode()).hexdigest()\
+          \ != payload.get('textRequestDigest') or payload.get('deadlineAtMs') !=\
+          \ deadline:\n            raise ValueError('Booklet Real report carrier differs')\n\
+          \        text = json.loads(payload['textRequestJson'])\n        if payload['textRequestJson']\
+          \ != canonical(text):\n            raise ValueError('Booklet Real text carrier\
+          \ differs')\n    elif hashlib.sha256(request.encode()).hexdigest() != digest:\n\
+          \        raise ValueError('Booklet prepared bytes differ')\n    else:\n\
+          \        text = payload\n    policy = text.get('bookletPolicy')\n    if\
+          \ not isinstance(policy, dict) or policy.get('contractVersion') != 'booklet_carrier_v2':\n\
+          \        raise ValueError('Booklet token policy missing')\n    original\
+          \ = {key: value for key, value in text.items() if key != 'bookletPolicy'}\n\
+          \    if hashlib.sha256(canonical(original).encode()).hexdigest() != policy.get('requestDigest'):\n\
+          \        raise ValueError('Booklet text request digest differs')\n    token\
+          \ = policy.get('tokenPolicy')\n    if not isinstance(token, dict) or token.get('version')\
+          \ != 'm4_context_policy_v2' or token.get('maxInputTokens') != 128000 or\
+          \ token.get('warningInputTokens') != 32000 or not isinstance(token.get('hash'),\
+          \ str) or not re.fullmatch('[0-9a-f]{64}', token['hash']):\n        raise\
+          \ ValueError('Booklet token policy differs')\n    for i in range(32):\n\
+          \        result['request_%02d' % i] = request[i * 65536:(i + 1) * 65536]\n\
+          \    result.update(authorized='yes', report='yes' if report else 'no', digest='sha256:'\
+          \ + digest,\n                  timeout_seconds=seconds, deadline_at_ms=deadline,\
+          \ token_policy_version=token['version'],\n                  token_policy_hash='sha256:'\
+          \ + token['hash'], max_input_tokens=128000, warning_input_tokens=32000)\n\
+          \    return result\n"
+        code_language: python3
+        outputs:
+          authorization_reason:
+            children: null
+            type: string
+          authorized:
+            children: null
+            type: string
+          deadline_at_ms:
+            children: null
+            type: number
+          digest:
+            children: null
+            type: string
+          max_input_tokens:
+            children: null
+            type: number
+          report:
+            children: null
+            type: string
+          request_00:
+            children: null
+            type: string
+          request_01:
+            children: null
+            type: string
+          request_02:
+            children: null
+            type: string
+          request_03:
+            children: null
+            type: string
+          request_04:
+            children: null
+            type: string
+          request_05:
+            children: null
+            type: string
+          request_06:
+            children: null
+            type: string
+          request_07:
+            children: null
+            type: string
+          request_08:
+            children: null
+            type: string
+          request_09:
+            children: null
+            type: string
+          request_10:
+            children: null
+            type: string
+          request_11:
+            children: null
+            type: string
+          request_12:
+            children: null
+            type: string
+          request_13:
+            children: null
+            type: string
+          request_14:
+            children: null
+            type: string
+          request_15:
+            children: null
+            type: string
+          request_16:
+            children: null
+            type: string
+          request_17:
+            children: null
+            type: string
+          request_18:
+            children: null
+            type: string
+          request_19:
+            children: null
+            type: string
+          request_20:
+            children: null
+            type: string
+          request_21:
+            children: null
+            type: string
+          request_22:
+            children: null
+            type: string
+          request_23:
+            children: null
+            type: string
+          request_24:
+            children: null
+            type: string
+          request_25:
+            children: null
+            type: string
+          request_26:
+            children: null
+            type: string
+          request_27:
+            children: null
+            type: string
+          request_28:
+            children: null
+            type: string
+          request_29:
+            children: null
+            type: string
+          request_30:
+            children: null
+            type: string
+          request_31:
+            children: null
+            type: string
+          timeout_seconds:
+            children: null
+            type: number
+          token_policy_hash:
+            children: null
+            type: string
+          token_policy_version:
+            children: null
+            type: string
+          warning_input_tokens:
+            children: null
+            type: number
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        title: real_decode
+        type: code
+        variables:
+        - value_selector:
+          - real_authorize
+          - body
+          variable: authorization_body
+        - value_selector:
+          - real_authorize
+          - status_code
+          variable: status_code
+      id: real_decode
+      position:
+        x: 1000
+        y: 600
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: real_authorized-match
+            value: 'yes'
+            varType: string
+            variable_selector:
+            - real_decode
+            - authorized
+          logical_operator: and
+        title: real_authorized
+        type: if-else
+      id: real_authorized
+      position:
+        x: 250
+        y: 600
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - real_decode
+          - authorization_reason
+          value_type: string
+          variable: authorization_reason
+        title: real_paused
+        type: end
+      id: real_paused
+      position:
+        x: 2100
+        y: 600
+      type: custom
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        memory: null
+        model:
+          completion_params:
+            booklet_bounded_execution: true
+            booklet_deadline_at_ms: '{{#real_decode.deadline_at_ms#}}'
+            booklet_max_input_tokens: '{{#real_decode.max_input_tokens#}}'
+            booklet_prepared_request: true
+            booklet_request_digest: '{{#real_decode.digest#}}'
+            booklet_timeout_seconds: '{{#real_decode.timeout_seconds#}}'
+            booklet_token_policy_hash: '{{#real_decode.token_policy_hash#}}'
+            booklet_token_policy_version: '{{#real_decode.token_policy_version#}}'
+            booklet_warning_input_tokens: '{{#real_decode.warning_input_tokens#}}'
+            enable_stream: false
+            max_tokens: 8192
+            reasoning_effort: low
+            reasoning_mode: standard
+            service_tier: default
+          mode: chat
+          name: gpt-6-luna
+          provider: langgenius/openai/openai
+        prompt_config:
+          jinja2_variables: []
+        prompt_template:
+        - edition_type: basic
+          role: user
+          text: '{{#real_decode.request_00#}}{{#real_decode.request_01#}}{{#real_decode.request_02#}}{{#real_decode.request_03#}}{{#real_decode.request_04#}}{{#real_decode.request_05#}}{{#real_decode.request_06#}}{{#real_decode.request_07#}}{{#real_decode.request_08#}}{{#real_decode.request_09#}}{{#real_decode.request_10#}}{{#real_decode.request_11#}}{{#real_decode.request_12#}}{{#real_decode.request_13#}}{{#real_decode.request_14#}}{{#real_decode.request_15#}}{{#real_decode.request_16#}}{{#real_decode.request_17#}}{{#real_decode.request_18#}}{{#real_decode.request_19#}}{{#real_decode.request_20#}}{{#real_decode.request_21#}}{{#real_decode.request_22#}}{{#real_decode.request_23#}}{{#real_decode.request_24#}}{{#real_decode.request_25#}}{{#real_decode.request_26#}}{{#real_decode.request_27#}}{{#real_decode.request_28#}}{{#real_decode.request_29#}}{{#real_decode.request_30#}}{{#real_decode.request_31#}}'
+        reasoning_format: separated
+        retry_config:
+          max_retries: 0
+          retry_enabled: false
+          retry_interval: 0
+        structured_output_enabled: false
+        title: specialist result
+        type: llm
+        vision:
+          enabled: false
+      id: real_llm
+      position:
+        x: 1400
+        y: 600
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - real_llm
+          - text
+          value_type: string
+          variable: booklet_provider_result
+        title: real_llm-finish
+        type: end
+      id: real_llm-finish
+      position:
+        x: 2100
+        y: 600
+      type: custom
+  rag_pipeline_variables: []
