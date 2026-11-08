@@ -1,7 +1,7 @@
 # Booklet Generation Architecture: Adoption and Developer Handoff Guide
 
 For the current Issue #65 Dify publications, see the
-[workflow reference package](accepted/2026-09-27_dify-booklet-runner/workflow-package/README.md),
+[Real-only workflow and prompt reference package](accepted/2026-09-27_dify-booklet-runner/workflow-package/README.md),
 which includes one detailed README and secret-free DSL snapshot per workflow.
 
 ## 1. Architecture purpose, fit, and evidence

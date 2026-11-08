@@ -2,159 +2,111 @@
 
 ## Purpose and identity
 
-Return an independent advisory assessment from the supplied saved evidence.
+Real execution reference for Independent judge.
 
 | Field | Value |
 | --- | --- |
-| App name | `issue65_m3_judge` |
-| App ID | `89f1adcd-1073-460d-98a3-e4df35c4263c` |
-| Published workflow ID | `de9614e4-dbb6-4286-9a15-43d570c963bc` |
-| Publication created (UTC) | 2026-10-31T16:37:37.000Z |
-| Captured (UTC) | 2026-11-08T08:22:37.892Z |
-| Graph | 27 nodes; 27 edges |
-| Capture method | Native secret-free app export; published graph verified |
+| App name | issue65_m3_judge |
+| App ID | 89f1adcd-1073-460d-98a3-e4df35c4263c |
+| Source published workflow ID | de9614e4-dbb6-4286-9a15-43d570c963bc |
+| Source captured UTC | 2026-11-08T08:22:37.892Z |
+| Derived UTC | 2026-11-08T10:30:01.888Z |
+| Graph | 8 nodes; 7 edges |
+| Capture method | Real-only derivative of a recorded native secret-free export |
 
-[Live editor](https://dify.uniwares.co.uk/app/89f1adcd-1073-460d-98a3-e4df35c4263c/workflow) · [Current DSL](workflow.yml) · [Package inventory](../../README.md#workflow-inventory) · [Manifest](../../manifest.json)
+[Source live editor](https://dify.uniwares.co.uk/app/89f1adcd-1073-460d-98a3-e4df35c4263c/workflow) · [Real-only DSL](workflow.yml) · [Prompt reference](prompts.md) · [Inventory](../../README.md#workflow-inventory) · [Manifest](../../manifest.json)
 
-The app’s historical milestone prefix does not restrict its current execution modes. The native description still refers to model-free preparation; the paid branches below are present in the inspected publication.
-
-The graph is preserved exactly. Native export empties the secret environment value and includes environment selector metadata that the publication API response omits; non-secret values and remaining declarations match the publication. No publication reconstruction was needed.
+The source live editor retains other modes. The packaged DSL removes their execution paths. [Original snapshot](https://github.com/karpishe-experiments/agentic-poc/blob/1d4cc02307edad21aadefc244bcc4e286396b88f/docs/accepted/2026-09-27_dify-booklet-runner/workflow-package/workflows/issue65_m3_judge/workflow.yml). Source descriptions may be stale; they are preserved in the DSL. Empty secret declarations are retained.
 
 ## Inputs and outputs
 
 ### Direct Start inputs
 
-| Variable | Type | Required | Default / limits | Meaning |
+| Name | Type | Required | Default | Visible maximum |
 | --- | --- | --- | --- | --- |
-| `run_id` | text-input | Yes | default "" | Booklet run UUID; checked by identity nodes. |
-| `operation_id` | text-input | Yes | default "" | Booklet operation UUID; identifies the single authorized operation. |
-| `parent_workflow_run_id` | text-input | No | default "" | Optional originating Dify workflow UUID; retained in identity. |
-| `mode` | text-input | Yes | default "" | Execution selector; identity nodes reject a mode inconsistent with the selected branch. |
-| `reference_files` | file-list | No | maximum 15; types image; extensions .png, .jpg, .jpeg, .webp; upload local_file | Ordered image files; passed to the custom image tool or retained for Real report handling. |
+| run_id | text-input | yes | "" | — |
+| operation_id | text-input | yes | "" | — |
+| parent_workflow_run_id | text-input | no | "" | — |
+| mode | text-input | yes | "real" | — |
+| reference_files | file-list | no | null | 15 |
+
+`mode` is required and defaults to `real`; the identity script rejects other values. The ordered file list retains the exact formats, upload settings and count limits in the DSL.
 
 ### Fetched data
 
-The authorization response supplies simulation context or a canonical prepared text/report request, digest, and deadline. Paid creative instructions are inside that external request, not authored by the graph’s concatenation template.
+Booklet authorization supplies the current eligible prepared request, operation fingerprint, deadline and policy metadata, or a reason to pause. Creative sources and request assembly are described in [prompts.md](prompts.md).
 
 ### Terminal outputs
 
-| End node | Output | Declared type | Source selector | Meaning |
-| --- | --- | --- | --- | --- |
-| `finish` | `booklet_result` | string | `simulate.booklet_result` | Simulated decision/report envelope; see report route |
-| `paused` | `authorization_reason` | string | `simulate.authorization_reason` | No execution: authorization/eligibility reason |
-| `m4_paused` | `authorization_reason` | string | `m4_decode.authorization_reason` | No execution: authorization/eligibility reason |
-| `m4_report_llm-finish` | `booklet_provider_result` | string | `m4_report_llm.text` | Provider envelope returned for external acceptance |
-| `real_paused` | `authorization_reason` | string | `real_decode.authorization_reason` | No execution: authorization/eligibility reason |
-| `real_report_llm-finish` | `booklet_provider_result` | string | `real_report_llm.text` | Provider envelope returned for external acceptance |
-| `real_report_llm-finish` | `reference_files` | array[file] | `start.reference_files` | Original ordered input files |
+| End node | Output | Type | Selector |
+| --- | --- | --- | --- |
+| real_paused | authorization_reason | string | ["real_decode","authorization_reason"] |
+| real_report_llm-finish | booklet_provider_result | string | ["real_report_llm","text"] |
+| real_report_llm-finish | reference_files | array[file] | ["start","reference_files"] |
 
-The output schema inside a paid provider request is external to this snapshot. The visible provider envelope is not itself proof that Booklet accepted or persisted its creative result.
+Success returns execution evidence/result; pause returns the authorization reason. There is no packaged simulation save callback. Acceptance and persistence are external.
 
 ## Execution
 
 ```mermaid
 flowchart TD
-  start[Run and operation identity] --> mode{Mode}
-  mode -->|Simulated| auth[Authorize and load context]
-  auth --> sim[Deterministic role fixture]
-  sim --> sg{Result available?}
-  sg -->|No| pause[Return authorization reason]
-  sg -->|Yes| route{Report?}
-  route -->|Yes| result[Return simulated report]
-  route -->|No| save[Save creator action]
-  save --> ack[Check saved completion]
-  ack --> result[Return result]
-  mode -->|Balanced or Real| paid[Authorize prepared request]
-  paid --> decode[Check request identity and deadline]
-  decode --> pg{Authorized?}
-  pg -->|No| pause
-  pg -->|Yes| llm[Selected role or report LLM]
-  llm --> output[Return provider envelope]
+  S[Start: Real identity] --> A[Authorize prepared request]
+  A --> D[Decode and validate]
+  D --> G{Authorized?}
+  G -->|No| P[Return pause reason]
+  G -->|Yes| E[Execute selected LLM]
+  E --> R[Return result]
 ```
 
-1. Start inputs identify the run and operation; identity Code nodes check mode and UUID shape.
-2. The selected authorization HTTP node sends this identity to Booklet using the environment-bound callback key.
-3. A non-started authorization yields a reason and bypasses provider execution. Authorized requests undergo role/request validation.
-4. Simulated uses the embedded fixture. Balanced/Real decode the prepared carrier and select one role/report provider node.
-5. Simulated creator actions use save plus acknowledgement; simulated reports return for external acceptance. Paid responses go directly to their provider-result End node.
-
-**Simulation behavior:** emits an assessment from supplied saved report evidence. It does not generate pages or issue creator approvals.
-
-### Exact configured routing conditions
-
-| Branch node | Selector | Condition | Matching handle |
-| --- | --- | --- | --- |
-| `authorized` | `simulate.booklet_result` | not empty | `true` |
-| `report-route` | `report-kind.report_kind` | not empty | `true` |
-| `m4_mode` | `start.mode` | is `simulated` | `true` |
-| `m4_authorized` | `m4_decode.authorized` | is `yes` | `true` |
-| `real_mode` | `start.mode` | is `real` | `true` |
-| `real_authorized` | `real_decode.authorized` | is `yes` | `true` |
-
-Other edges use the nonmatching branch or ordinary source handle. The DSL retains all exact edge selectors and handles.
+1. Validate Real mode and UUID identities.
+2. Claim the prepared operation through the authorization endpoint.
+3. Decode the carrier; check status, identity/role, digests, deadline and applicable policy/schema/reference evidence.
+4. Run the selected LLM only after authorization.
+5. Return the selected End envelope. Script/provider failures remain failures; no successful result is fabricated.
 
 ## Models, prompts, tools, and configuration
 
-| LLM node | Provider | Model | max_tokens setting | Reasoning effort | Streaming | Node retries |
-| --- | --- | --- | --- | --- | --- | --- |
-| `m4_report_llm` | `langgenius/openai/openai` | `gpt-6-sol` | `8192` | `low` | Disabled | Disabled |
-| `real_report_llm` | `langgenius/openai/openai` | `gpt-6-sol` | `8192` | `low` | Disabled | Disabled |
+| Node | Provider | Model | Configured completion parameters |
+| --- | --- | --- | --- |
+| real_report_llm | langgenius/openai/openai | gpt-6-sol | {"booklet_bounded_execution":true,"booklet_deadline_at_ms":"{{#real_decode.deadline_at_ms#}}","booklet_max_input_tokens":"{{#real_decode.max_input_tokens#}}","booklet_prepared_request":true,"booklet_real_report_execution":true,"booklet_request_digest":"{{#real_decode.digest#}}","booklet_timeout_seconds":"{{#real_decode.timeout_seconds#}}","booklet_token_policy_hash":"{{#real_decode.token_policy_hash#}}","booklet_token_policy_version":"{{#real_decode.token_policy_version#}}","booklet_warning_input_tokens":"{{#real_decode.warning_input_tokens#}}","enable_stream":false,"json_schema":"{{#real_decode.schema_json#}}","max_tokens":8192,"reasoning_effort":"low","reasoning_mode":"standard","response_format":"json_schema","service_tier":"default"} |
 
-**Graph fact:** LLM prompt templates concatenate the decoder’s 32 request chunks. `booklet_prepared_request` and bounded-execution parameters tell the custom provider to consume the prepared carrier. Static settings are visible configuration; effective request interpretation and token/count enforcement require the pinned provider package and Booklet request.
+No tool node is present.
 
-| LLM node | Additional configured parameters |
-| --- | --- |
-| `m4_report_llm` | `booklet_bounded_execution` = `true`; `booklet_deadline_at_ms` = `{{#m4_decode.deadline_at_ms#}}`; `booklet_prepared_request` = `true`; `booklet_request_digest` = `{{#m4_decode.digest#}}`; `booklet_timeout_seconds` = `{{#m4_decode.timeout_seconds#}}`; `reasoning_mode` = `standard`; `service_tier` = `default` |
-| `real_report_llm` | `booklet_bounded_execution` = `true`; `booklet_deadline_at_ms` = `{{#real_decode.deadline_at_ms#}}`; `booklet_max_input_tokens` = `{{#real_decode.max_input_tokens#}}`; `booklet_prepared_request` = `true`; `booklet_real_report_execution` = `true`; `booklet_request_digest` = `{{#real_decode.digest#}}`; `booklet_timeout_seconds` = `{{#real_decode.timeout_seconds#}}`; `booklet_token_policy_hash` = `{{#real_decode.token_policy_hash#}}`; `booklet_token_policy_version` = `{{#real_decode.token_policy_version#}}`; `booklet_warning_input_tokens` = `{{#real_decode.warning_input_tokens#}}`; `json_schema` = `{{#real_decode.schema_json#}}`; `reasoning_mode` = `standard`; `response_format` = `json_schema`; `service_tier` = `default` |
+LLM templates forward the decoder’s prepared request chunks; creative system instructions and effective output schemas are externally supplied. Static settings above do not override the custom provider’s interpretation of that request. [Exact prompt and assembly reference](prompts.md).
 
-### Plugin dependencies
+Plugin dependencies:
 
 - `langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2`
 
-Dependency declarations are from the native export. Provider namespace/tool identity agrees with the published graph. Installation and account entitlement were not tested.
-
-No tool node or direct workflow-as-tool invocation is present.
-
-### Environment and files
-
-| Variable | Type | Use |
+| Environment name | Type | Binding category |
 | --- | --- | --- |
-| `BOOKLET_ORIGIN` | string | Booklet HTTPS origin used to form callback URLs |
-| `BOOKLET_TOOL_KEY` | secret | Empty in this export; privately bind the Booklet callback/tool key |
+| BOOKLET_ORIGIN | string | Booklet origin; non-secret |
+| BOOKLET_TOOL_KEY | secret | Private callback/tool key; empty value |
 
-Start accepts up to 15 ordered image files. Consult the Start table for formats. The terminal table shows which branches retain them. Real report decoding validates an ordered image manifest; its custom provider interprets that carrier. A Dify vision toggle alone does not describe the provider’s multimodal request.
+Ordered files and reference manifests must remain consistent; consult the DSL Start settings and shared image/report assembly reference.
 
 ## Relationships and external interfaces
 
-Consumes report evidence supplied externally and returns an independent assessment. It does not directly invoke the tester and does not route repairs or generation.
+Consumes final current artifacts and ordered final images for a report.
 
-**Graph fact:** No direct child-workflow invocation is configured.
+No direct child-workflow calls are present. Booklet sequences these workflows externally. Do not interpret artifact dependencies as direct Dify calls.
 
-| HTTP node | Method | URL template | Timeout seconds | Purpose |
+| HTTP node | Method | URL | Timeouts | Retry configuration |
 | --- | --- | --- | --- | --- |
-| `authorize` | POST | `{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize` | `{"connect":10,"read":30,"write":30}` | Authenticate and claim authorized work |
-| `save` | POST | `{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/result` | `{"connect":10,"read":30,"write":30}` | Save simulated result |
-| `m4_authorize` | POST | `{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize` | `{"connect":10,"read":30,"write":30}` | Authenticate and claim authorized work |
-| `real_authorize` | POST | `{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize` | `{"connect":10,"read":30,"write":30}` | Authenticate and claim authorized work |
+| real_authorize | post | {{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize | {"connect":10,"read":30,"write":30} | {"max_retries":0,"retry_enabled":false,"retry_interval":0} |
 
-HTTP nodes use the `x-booklet-tool-key` header bound to `env.BOOKLET_TOOL_KEY`; no key value is included.
+Authorization uses `x-booklet-tool-key` bound to `BOOKLET_TOOL_KEY`.
 
 ## Failure and pause behavior
 
-Authorization refusal returns `authorization_reason` and avoids execution. Identity, role, malformed prepared JSON, digest, and expired-deadline checks can raise errors rather than return a successful result. A simulated saved action requires a successful Booklet acknowledgement. Paid output is returned for external acceptance; returning text does not establish persistence.
-
-14 nodes declare retry configuration; 0 enable it. No loop or iteration node is present. Provider-internal retries and accounting cannot be proved from a graph retry toggle. External Resume/reconciliation behavior is not implemented as a loop in this graph.
+Invalid Real mode or UUIDs fail before authorization. Transport/envelope/digest/deadline/policy checks can fail before provider execution. An authorization refusal returns `real_paused`. A successful provider envelope is returned for application acceptance, not saved by a result callback in this graph. HTTP retry settings are listed above; provider-internal behavior requires the pinned adapter source.
 
 ## Efficiency and relevance to Unitale
 
-Simulated: zero LLM invocations; ordinary saved results use authorization and save HTTP calls. Simulated advisory reports return without the save callback. Balanced/Real: one authorization HTTP call and one selected LLM invocation. 2 configured LLM nodes are mutually exclusive across modes; they are not all executed in one invocation.
+Authorized selected path: **one HTTP authorization + one LLM invocation**. Paused path: one authorization and zero model/tool invocations.  No loop or iteration node is retained. Provider calls and transport are serial. These counts describe graph structure, not measured cost, timing, reliability or quality.
 
-A separate judge gives evaluation a distinct role, at the cost of another prepared request and potentially large image/text context.
-
-**Interpretation for Unitale:** assess whether this role boundary and external request ownership justify their orchestration cost for the intended creator journey. The snapshot provides no measured latency, cost, quality, or reliability comparison.
+External context preparation and result acceptance remain coupling points. Target role: **Quality Reviewer**. [Unitale implications](../../prompt-reference/unitale-migration.md).
 
 ## Evidence limits
 
-Facts above come from this published graph and its embedded simulation code. Paid creative prompts, current approvals/grants, external orchestration, live provider internals, and stored runtime results are not bundled. Upstream/downstream relationships are artifact flow inferred from simulation source checks, not direct Dify execution edges.
-
-Offline Dify validation: valid, 0 errors, 0 warnings. No validator warning was reported. Offline validation is not an import or execution test.
+This file is a derived reference, not a new live export or a self-contained Unitale workflow. It requires external prepared requests, runtime state, credentials and custom provider/tool packages. Offline graph validation does not prove import or execution. Simulation-only behavior has been removed from this DSL. Inherited source wording and projection limitations are documented in [context and contracts](../../prompt-reference/context-and-contracts.md).

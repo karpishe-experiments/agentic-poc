@@ -1,39 +1,38 @@
 app:
-  description: Issue65 M2 model-free image transport probe. Private bindings and live
-    acceptance remain separate.
+  description: Issue65 M2 model-free image transport probe. Private bindings and live acceptance remain separate.
   icon: M
-  icon_background: '#E8F4FF'
+  icon_background: "#E8F4FF"
   icon_type: emoji
   mode: workflow
   name: issue65_m2_image_probe
   use_icon_as_answer_icon: false
 dependencies:
-- current_identifier: null
-  type: package
-  value:
-    plugin_unique_identifier: langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05
-    version: null
+  - current_identifier: null
+    type: package
+    value:
+      plugin_unique_identifier: langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05
+      version: null
 kind: app
 version: 0.7.0
 workflow:
   conversation_variables: []
   environment_variables:
-  - description: Reviewed Booklet staging origin.
-    id: 00000000-0000-4000-8000-000000000065
-    name: BOOKLET_ORIGIN
-    selector:
-    - env
-    - BOOKLET_ORIGIN
-    value: https://booklet-staging.uniwares.co.uk
-    value_type: string
-  - description: Dedicated runner callback key; bind privately before execution.
-    id: 00000000-0000-4000-8000-000000000066
-    name: BOOKLET_TOOL_KEY
-    selector:
-    - env
-    - BOOKLET_TOOL_KEY
-    value: ''
-    value_type: secret
+    - description: Reviewed Booklet staging origin.
+      id: 00000000-0000-4000-8000-000000000065
+      name: BOOKLET_ORIGIN
+      selector:
+        - env
+        - BOOKLET_ORIGIN
+      value: https://booklet-staging.uniwares.co.uk
+      value_type: string
+    - description: Dedicated runner callback key; bind privately before execution.
+      id: 00000000-0000-4000-8000-000000000066
+      name: BOOKLET_TOOL_KEY
+      selector:
+        - env
+        - BOOKLET_TOOL_KEY
+      value: ""
+      value_type: secret
   features:
     file_upload:
       enabled: false
@@ -41,1668 +40,559 @@ workflow:
       enabled: false
     text_to_speech:
       enabled: false
-      language: ''
-      voice: ''
+      language: ""
+      voice: ""
   graph:
     edges:
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: http-request
-      id: identity-authorize
-      source: identity
-      sourceHandle: source
-      target: authorize
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: code
-      id: authorize-prepare
-      source: authorize
-      sourceHandle: source
-      target: prepare
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: if-else
-      id: prepare-authorized
-      source: prepare
-      sourceHandle: source
-      target: authorized
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: http-request
-      id: authorized-fixture
-      source: authorized
-      sourceHandle: 'true'
-      target: fixture
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: end
-      id: authorized-paused
-      source: authorized
-      sourceHandle: 'false'
-      target: paused
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: list-operator
-      id: fixture-select_file
-      source: fixture
-      sourceHandle: source
-      target: select_file
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: list-operator
-        targetType: http-request
-      id: select_file-upload
-      source: select_file
-      sourceHandle: source
-      target: upload
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: code
-      id: upload-ack
-      source: upload
-      sourceHandle: source
-      target: ack
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: end
-      id: ack-finish
-      source: ack
-      sourceHandle: source
-      target: finish
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: http-request
-      id: m4_image_identity-authorize
-      source: m4_image_identity
-      sourceHandle: source
-      target: m4_image_authorize
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: code
-      id: m4_image_authorize-prepare
-      source: m4_image_authorize
-      sourceHandle: source
-      target: m4_image_prepare
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: if-else
-      id: m4_image_prepare-authorized
-      source: m4_image_prepare
-      sourceHandle: source
-      target: m4_image_authorized
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: http-request
-      id: m4_image_authorized-fixture
-      source: m4_image_authorized
-      sourceHandle: 'true'
-      target: m4_image_fixture
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: end
-      id: m4_image_authorized-paused
-      source: m4_image_authorized
-      sourceHandle: 'false'
-      target: m4_image_paused
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: list-operator
-      id: m4_image_fixture-select_file
-      source: m4_image_fixture
-      sourceHandle: source
-      target: m4_image_select_file
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: list-operator
-        targetType: http-request
-      id: m4_image_select_file-upload
-      source: m4_image_select_file
-      sourceHandle: source
-      target: m4_image_upload
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: code
-      id: m4_image_upload-ack
-      source: m4_image_upload
-      sourceHandle: source
-      target: m4_image_ack
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: end
-      id: m4_image_ack-finish
-      source: m4_image_ack
-      sourceHandle: source
-      target: m4_image_finish
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: start
-        targetType: if-else
-      id: start-real_mode
-      source: start
-      sourceHandle: source
-      target: real_mode
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: code
-      id: real_mode-real_identity
-      source: real_mode
-      sourceHandle: 'true'
-      target: real_identity
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: if-else
-      id: real_mode-m4_image_mode
-      source: real_mode
-      sourceHandle: 'false'
-      target: m4_image_mode
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: code
-      id: m4_image_mode-identity
-      source: m4_image_mode
-      sourceHandle: 'true'
-      target: identity
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: code
-      id: m4_image_mode-m4_image_identity
-      source: m4_image_mode
-      sourceHandle: 'false'
-      target: m4_image_identity
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: http-request
-      id: real_identity-real_authorize
-      source: real_identity
-      sourceHandle: source
-      target: real_authorize
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: http-request
-        targetType: code
-      id: real_authorize-real_decode
-      source: real_authorize
-      sourceHandle: source
-      target: real_decode
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: if-else
-      id: real_decode-real_authorized
-      source: real_decode
-      sourceHandle: source
-      target: real_authorized
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: end
-      id: real_authorized-real_paused
-      source: real_authorized
-      sourceHandle: 'false'
-      target: real_paused
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: if-else
-        targetType: tool
-      id: real_authorized-real_image_tool
-      source: real_authorized
-      sourceHandle: 'true'
-      target: real_image_tool
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: tool
-        targetType: code
-      id: real_image_tool-real_image_result
-      source: real_image_tool
-      sourceHandle: source
-      target: real_image_result
-      targetHandle: target
-      type: custom
-      zIndex: 0
-    - data:
-        isInIteration: false
-        isInLoop: false
-        sourceType: code
-        targetType: end
-      id: real_image_result-real_image_finish
-      source: real_image_result
-      sourceHandle: source
-      target: real_image_finish
-      targetHandle: target
-      type: custom
-      zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: start
+          targetType: if-else
+        id: start-real_identity
+        source: start
+        sourceHandle: source
+        target: real_identity
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: code
+          targetType: http-request
+        id: real_identity-real_authorize
+        source: real_identity
+        sourceHandle: source
+        target: real_authorize
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: http-request
+          targetType: code
+        id: real_authorize-real_decode
+        source: real_authorize
+        sourceHandle: source
+        target: real_decode
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: code
+          targetType: if-else
+        id: real_decode-real_authorized
+        source: real_decode
+        sourceHandle: source
+        target: real_authorized
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: if-else
+          targetType: end
+        id: real_authorized-real_paused
+        source: real_authorized
+        sourceHandle: "false"
+        target: real_paused
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: if-else
+          targetType: tool
+        id: real_authorized-real_image_tool
+        source: real_authorized
+        sourceHandle: "true"
+        target: real_image_tool
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: tool
+          targetType: code
+        id: real_image_tool-real_image_result
+        source: real_image_tool
+        sourceHandle: source
+        target: real_image_result
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: code
+          targetType: end
+        id: real_image_result-real_image_finish
+        source: real_image_result
+        sourceHandle: source
+        target: real_image_finish
+        targetHandle: target
+        type: custom
+        zIndex: 0
     nodes:
-    - data:
-        title: Simulated image probe input
-        type: start
-        variables:
-        - default: ''
-          label: run_id
-          options: []
-          required: true
-          type: text-input
-          variable: run_id
-        - default: ''
-          label: operation_id
-          options: []
-          required: true
-          type: text-input
-          variable: operation_id
-        - default: ''
-          label: parent_workflow_run_id
-          options: []
-          required: false
-          type: text-input
-          variable: parent_workflow_run_id
-        - default: ''
-          label: mode
-          options: []
-          required: true
-          type: text-input
-          variable: mode
-        - allowed_file_extensions:
-          - .png
-          - .jpg
-          - .jpeg
-          - .webp
-          allowed_file_types:
-          - image
-          allowed_file_upload_methods:
-          - local_file
-          label: Ordered approved image references
-          max_length: 15
-          required: false
-          type: file-list
-          variable: reference_files
-      height: 213
-      id: start
-      position:
-        x: 0
-        y: 0
-      positionAbsolute:
-        x: 0
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
-          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'simulated':\n\
-          \        raise ValueError('This publication supports simulation only')\n\
-          \    for value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n\
-          \    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n\
-          \    return {'identity_json': json.dumps({'runId': run_id, 'operationId':\
-          \ operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
-          \ parent_workflow_run_id or None})}\n"
-        code_language: python3
-        outputs:
-          identity_json:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Validate simulation identity
-        type: code
-        variables:
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - start
-          - mode
-          variable: mode
-      height: 52
-      id: identity
-      position:
-        x: 280
-        y: 0
-      positionAbsolute:
-        x: 280
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data:
-          - type: text
-            value: '{{#identity.identity_json#}}'
-          type: raw-text
-        headers: 'Content-Type:application/json
+      - data:
+          title: Simulated image probe input
+          type: start
+          variables:
+            - default: ""
+              label: run_id
+              options: []
+              required: true
+              type: text-input
+              variable: run_id
+            - default: ""
+              label: operation_id
+              options: []
+              required: true
+              type: text-input
+              variable: operation_id
+            - default: ""
+              label: parent_workflow_run_id
+              options: []
+              required: false
+              type: text-input
+              variable: parent_workflow_run_id
+            - default: real
+              label: mode
+              options: []
+              required: true
+              type: text-input
+              variable: mode
+            - allowed_file_extensions:
+                - .png
+                - .jpg
+                - .jpeg
+                - .webp
+              allowed_file_types:
+                - image
+              allowed_file_upload_methods:
+                - local_file
+              label: Ordered approved image references
+              max_length: 15
+              required: false
+              type: file-list
+              variable: reference_files
+        height: 213
+        id: start
+        position:
+          x: 0
+          "y": 0
+        positionAbsolute:
+          x: 0
+          "y": 0
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          code: |
+            import json
+            from uuid import UUID
 
-          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
-        method: post
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Reserve image once in Booklet
-        type: http-request
-        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
-      height: 127
-      id: authorize
-      position:
-        x: 560
-        y: 0
-      positionAbsolute:
-        x: 560
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nimport re\nfrom urllib.parse import urlencode\n\ndef main(authorization_body,\
-          \ status_code, run_id, operation_id, workflow_run_id, parent_workflow_run_id,\
-          \ booklet_origin):\n    if status_code != 200:\n        raise ValueError('Booklet\
-          \ authorization failed')\n    data = json.loads(authorization_body).get('data',\
-          \ {})\n    if data.get('started') is not True:\n        reason = data.get('reason')\n\
-          \        if not isinstance(reason, str) or not reason:\n            raise\
-          \ ValueError('Booklet did not provide an authorization reason')\n      \
-          \  return {'fixture_url': '', 'upload_url': '', 'input_fingerprint': '',\
-          \ 'authorization_reason': reason}\n    fingerprint = data.get('inputFingerprint')\n\
-          \    context = data.get('context')\n    if data.get('role') != 'image' or\
-          \ data.get('mode') != 'simulated' or not isinstance(fingerprint, str) or\
-          \ not re.fullmatch(r'[0-9a-f]{64}', fingerprint) or not isinstance(context,\
-          \ dict) or context.get('role') != 'image' or context.get('mode') != 'simulated'\
-          \ or context.get('inputFingerprint') != fingerprint or not isinstance(context.get('imageRequest'),\
-          \ dict):\n        raise ValueError('Booklet image authorization is inconsistent')\n\
-          \    request = context['imageRequest']\n    if not isinstance(request.get('prompt'),\
-          \ str) or not request['prompt'] or not isinstance(request.get('sourceVersionIds'),\
-          \ list):\n        raise ValueError('Booklet image request is incomplete')\n\
-          \    query = urlencode({'runId': run_id, 'operationId': operation_id, 'workflowRunId':\
-          \ workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id or '',\
-          \ 'inputFingerprint': fingerprint})\n    base = booklet_origin.rstrip('/')\
-          \ + '/api/experiments/booklet-tools/'\n    return {'fixture_url': base +\
-          \ 'image-fixture?' + query, 'upload_url': base + 'image?' + query, 'input_fingerprint':\
-          \ fingerprint, 'authorization_reason': ''}\n"
-        code_language: python3
-        outputs:
-          authorization_reason:
-            children: null
-            type: string
-          fixture_url:
-            children: null
-            type: string
-          input_fingerprint:
-            children: null
-            type: string
-          upload_url:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Check authorization and form operation URLs
-        type: code
-        variables:
-        - value_selector:
-          - authorize
-          - body
-          variable: authorization_body
-        - value_selector:
-          - authorize
-          - status_code
-          variable: status_code
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - env
-          - BOOKLET_ORIGIN
-          variable: booklet_origin
-      height: 52
-      id: prepare
-      position:
-        x: 840
-        y: 0
-      positionAbsolute:
-        x: 840
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        cases:
-        - case_id: 'true'
-          conditions:
-          - comparison_operator: not empty
-            id: has-fixture-url
-            value: ''
-            varType: string
-            variable_selector:
-            - prepare
-            - fixture_url
-          logical_operator: and
-        title: Download only after reservation
-        type: if-else
-      height: 140
-      id: authorized
-      position:
-        x: 1120
-        y: 0
-      positionAbsolute:
-        x: 1120
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data: []
-          type: none
-        headers: x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}
-        method: get
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Download synthetic PNG bytes
-        type: http-request
-        url: '{{#prepare.fixture_url#}}'
-      height: 94
-      id: fixture
-      position:
-        x: 1400
-        y: 0
-      positionAbsolute:
-        x: 1400
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        extract_by:
-          enabled: true
-          serial: '1'
-        filter_by:
-          conditions: []
-          enabled: false
-        item_var_type: file
-        limit:
-          enabled: false
-          size: 1
-        order_by:
-          enabled: false
-          key: ''
-          value: asc
-        title: Select original fixture file
-        type: list-operator
-        var_type: array[file]
-        variable:
-        - fixture
-        - files
-      height: 92
-      id: select_file
-      position:
-        x: 1540
-        y: 0
-      positionAbsolute:
-        x: 1540
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data:
-          - file:
-            - select_file
-            - first_record
-            type: file
-          type: binary
-        headers: 'Content-Type:application/octet-stream
+            def main(run_id, operation_id, workflow_run_id, parent_workflow_run_id, mode):
+                if mode != 'real':
+                    raise ValueError('This branch supports Real only')
+                for value in (run_id, operation_id, workflow_run_id):
+                    UUID(value)
+                if parent_workflow_run_id:
+                    UUID(parent_workflow_run_id)
+                return {'identity_json': json.dumps({'runId': run_id, 'operationId': operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id or None})}
+          code_language: python3
+          outputs:
+            identity_json:
+              children: null
+              type: string
+          retry_config:
+            max_retries: 0
+            retry_enabled: false
+            retry_interval: 0
+          title: Validate Real identity
+          type: code
+          variables:
+            - value_selector:
+                - start
+                - run_id
+              variable: run_id
+            - value_selector:
+                - start
+                - operation_id
+              variable: operation_id
+            - value_selector:
+                - sys
+                - workflow_run_id
+              variable: workflow_run_id
+            - value_selector:
+                - start
+                - parent_workflow_run_id
+              variable: parent_workflow_run_id
+            - value_selector:
+                - start
+                - mode
+              variable: mode
+        height: 52
+        id: real_identity
+        position:
+          x: 280
+          "y": 0
+        positionAbsolute:
+          x: 280
+          "y": 0
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          authorization:
+            type: no-auth
+          body:
+            data:
+              - type: text
+                value: "{{#real_identity.identity_json#}}"
+            type: raw-text
+          headers: |-
+            Content-Type:application/json
+            x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}
+          method: post
+          params: ""
+          retry_config:
+            max_retries: 0
+            retry_enabled: false
+            retry_interval: 0
+          ssl_verify: true
+          timeout:
+            connect: 10
+            read: 30
+            write: 30
+          title: Claim the prepared Real image once
+          type: http-request
+          url: "{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize"
+        height: 127
+        id: real_authorize
+        position:
+          x: 560
+          "y": 0
+        positionAbsolute:
+          x: 560
+          "y": 0
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          code: |
+            import hashlib
+            import json
+            import re
+            import time
 
-          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
-        method: post
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Upload original fixture bytes
-        type: http-request
-        url: '{{#prepare.upload_url#}}'
-      height: 94
-      id: upload
-      position:
-        x: 1680
-        y: 0
-      positionAbsolute:
-        x: 1680
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nimport re\n\ndef main(body, status_code, run_id, operation_id,\
-          \ workflow_run_id, parent_workflow_run_id, input_fingerprint):\n    data\
-          \ = json.loads(body).get('data', {})\n    asset_id = data.get('assetId')\n\
-          \    digest = data.get('sha256')\n    if status_code != 200 or data.get('state')\
-          \ != 'succeeded' or asset_id != operation_id or not isinstance(digest, str)\
-          \ or not re.fullmatch(r'[0-9a-f]{64}', digest):\n        raise ValueError('Booklet\
-          \ did not confirm saved image completion')\n    result = {'runId': run_id,\
-          \ 'operationId': operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
-          \ parent_workflow_run_id or None, 'inputFingerprint': input_fingerprint,\
-          \ 'assetId': asset_id, 'sha256': digest}\n    return {'image_result': json.dumps(result)}\n"
-        code_language: python3
-        outputs:
-          image_result:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Require saved image completion
-        type: code
-        variables:
-        - value_selector:
-          - upload
-          - body
-          variable: body
-        - value_selector:
-          - upload
-          - status_code
-          variable: status_code
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - prepare
-          - input_fingerprint
-          variable: input_fingerprint
-      height: 52
-      id: ack
-      position:
-        x: 1960
-        y: 0
-      positionAbsolute:
-        x: 1960
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - ack
-          - image_result
-          value_type: string
-          variable: image_result
-        - value_selector:
-          - start
-          - reference_files
-          value_type: array[file]
-          variable: reference_files
-        title: Saved image completion
-        type: end
-      height: 114
-      id: finish
-      position:
-        x: 2240
-        y: 0
-      positionAbsolute:
-        x: 2240
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - prepare
-          - authorization_reason
-          value_type: string
-          variable: authorization_reason
-        title: Paused without execution
-        type: end
-      height: 88
-      id: paused
-      position:
-        x: 1400
-        y: 300
-      positionAbsolute:
-        x: 1400
-        y: 300
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        cases:
-        - case_id: 'true'
-          conditions:
-          - comparison_operator: is
-            id: m4_image_mode-match
-            value: simulated
-            varType: string
-            variable_selector:
-            - start
-            - mode
-          logical_operator: and
-        title: m4_image_mode
-        type: if-else
-      height: 148
-      id: m4_image_mode
-      position:
-        x: 1120
-        y: 600
-      positionAbsolute:
-        x: 1120
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
-          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'balanced':\n\
-          \        raise ValueError('This branch supports Balanced only')\n    for\
-          \ value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n\
-          \    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n\
-          \    return {'identity_json': json.dumps({'runId': run_id, 'operationId':\
-          \ operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
-          \ parent_workflow_run_id or None})}\n"
-        code_language: python3
-        outputs:
-          identity_json:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Validate simulation identity
-        type: code
-        variables:
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - start
-          - mode
-          variable: mode
-      height: 52
-      id: m4_image_identity
-      position:
-        x: 280
-        y: 0
-      positionAbsolute:
-        x: 280
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data:
-          - type: text
-            value: '{{#m4_image_identity.identity_json#}}'
-          type: raw-text
-        headers: 'Content-Type:application/json
+            def main(authorization_body, status_code):
+                if status_code != 200 or not isinstance(authorization_body, str) or len(authorization_body.encode('utf-8')) > 1048576:
+                    raise ValueError('Booklet authorization transport failed')
+                data = json.loads(authorization_body).get('data')
+                if not isinstance(data, dict):
+                    raise ValueError('Booklet authorization envelope is missing')
+                result = {'authorized': '', 'authorization_reason': '', 'request_json': '', 'input_fingerprint': ''}
+                if data.get('started') is not True:
+                    reason = data.get('reason')
+                    if data.get('started') is not False or not isinstance(reason, str) or not reason or len(reason) > 1024:
+                        raise ValueError('Booklet authorization denial is invalid')
+                    result['authorization_reason'] = reason
+                    return result
+                if data.get('mode') != 'real' or data.get('role') != 'image' or data.get('taskId') not in ('J08', 'J09', 'J10', 'J13'):
+                    raise ValueError('Booklet image role differs')
+                fingerprint = data.get('inputFingerprint')
+                if not isinstance(fingerprint, str) or not re.fullmatch('[0-9a-f]{64}', fingerprint):
+                    raise ValueError('Booklet image fingerprint is missing')
+                request = data.get('requestJson')
+                if not isinstance(request, str) or not request or len(request.encode('utf-8')) > 131072 or '\x00' in request:
+                    raise ValueError('Booklet image request is missing')
+                payload = json.loads(request)
+                canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+                if request != canonical(payload) or payload.get('schemaVersion') != 'booklet_real_image_request_v1' or not isinstance(payload.get('requestDigest'), str):
+                    raise ValueError('Booklet image request differs')
+                digest = payload['requestDigest']
+                body = {key: value for key, value in payload.items() if key != 'requestDigest'}
+                if not re.fullmatch('[0-9a-f]{64}', digest) or hashlib.sha256(canonical(body).encode()).hexdigest() != digest or type(payload.get('deadlineAtMs')) is not int or payload['deadlineAtMs'] <= time.time() * 1000:
+                    raise ValueError('Booklet image digest or deadline differs')
+                result.update(authorized='yes', request_json=request, input_fingerprint=fingerprint)
+                return result
+          code_language: python3
+          outputs:
+            authorization_reason:
+              children: null
+              type: string
+            authorized:
+              children: null
+              type: string
+            input_fingerprint:
+              children: null
+              type: string
+            request_json:
+              children: null
+              type: string
+          retry_config:
+            max_retries: 0
+            retry_enabled: false
+            retry_interval: 0
+          title: real_decode
+          type: code
+          variables:
+            - value_selector:
+                - real_authorize
+                - body
+              variable: authorization_body
+            - value_selector:
+                - real_authorize
+                - status_code
+              variable: status_code
+        height: 52
+        id: real_decode
+        position:
+          x: 1000
+          "y": 600
+        positionAbsolute:
+          x: 1000
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          cases:
+            - case_id: "true"
+              conditions:
+                - comparison_operator: is
+                  id: real_authorized-match
+                  value: "yes"
+                  varType: string
+                  variable_selector:
+                    - real_decode
+                    - authorized
+              logical_operator: and
+          title: real_authorized
+          type: if-else
+        height: 148
+        id: real_authorized
+        position:
+          x: 250
+          "y": 600
+        positionAbsolute:
+          x: 250
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          outputs:
+            - value_selector:
+                - real_decode
+                - authorization_reason
+              value_type: string
+              variable: authorization_reason
+          title: real_paused
+          type: end
+        height: 88
+        id: real_paused
+        position:
+          x: 2100
+          "y": 600
+        positionAbsolute:
+          x: 2100
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          provider_id: langgenius/openai_tool/openai
+          provider_name: openai
+          provider_type: builtin
+          retry_config:
+            max_retries: 0
+            retry_enabled: false
+            retry_interval: 0
+          title: Booklet bounded Real image
+          tool_configurations: {}
+          tool_label: Booklet Real image
+          tool_name: booklet_real_image
+          tool_node_version: "2"
+          tool_parameters:
+            booklet_tool_key:
+              type: mixed
+              value: "{{#env.BOOKLET_TOOL_KEY#}}"
+            input_fingerprint:
+              type: variable
+              value:
+                - real_decode
+                - input_fingerprint
+            operation_id:
+              type: variable
+              value:
+                - start
+                - operation_id
+            parent_workflow_run_id:
+              type: variable
+              value:
+                - start
+                - parent_workflow_run_id
+            reference_files:
+              type: variable
+              value:
+                - start
+                - reference_files
+            request_json:
+              type: variable
+              value:
+                - real_decode
+                - request_json
+            run_id:
+              type: variable
+              value:
+                - start
+                - run_id
+            workflow_run_id:
+              type: variable
+              value:
+                - sys
+                - workflow_run_id
+          type: tool
+        height: 52
+        id: real_image_tool
+        position:
+          x: 1500
+          "y": 600
+        positionAbsolute:
+          x: 1500
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          code: >
+            import json
 
-          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
-        method: post
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Reserve image once in Booklet
-        type: http-request
-        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
-      height: 127
-      id: m4_image_authorize
-      position:
-        x: 560
-        y: 0
-      positionAbsolute:
-        x: 560
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nimport re\nfrom urllib.parse import urlencode\n\ndef main(authorization_body,\
-          \ status_code, run_id, operation_id, workflow_run_id, parent_workflow_run_id,\
-          \ booklet_origin):\n    if status_code != 200:\n        raise ValueError('Booklet\
-          \ authorization failed')\n    data = json.loads(authorization_body).get('data',\
-          \ {})\n    if data.get('started') is not True:\n        reason = data.get('reason')\n\
-          \        if not isinstance(reason, str) or not reason:\n            raise\
-          \ ValueError('Booklet did not provide an authorization reason')\n      \
-          \  return {'fixture_url': '', 'upload_url': '', 'input_fingerprint': '',\
-          \ 'authorization_reason': reason}\n    fingerprint = data.get('inputFingerprint')\n\
-          \    context = data.get('context')\n    if data.get('role') != 'image' or\
-          \ data.get('mode') != 'balanced' or not isinstance(fingerprint, str) or\
-          \ not re.fullmatch(r'[0-9a-f]{64}', fingerprint) or not isinstance(context,\
-          \ dict) or context.get('role') != 'image' or (context.get('mode') != 'balanced'\
-          \ or context.get('imageProvider') != 'simulated') or context.get('inputFingerprint')\
-          \ != fingerprint or not isinstance(context.get('imageRequest'), dict):\n\
-          \        raise ValueError('Booklet image authorization is inconsistent')\n\
-          \    request = context['imageRequest']\n    if not isinstance(request.get('prompt'),\
-          \ str) or not request['prompt'] or not isinstance(request.get('sourceVersionIds'),\
-          \ list):\n        raise ValueError('Booklet image request is incomplete')\n\
-          \    query = urlencode({'runId': run_id, 'operationId': operation_id, 'workflowRunId':\
-          \ workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id or '',\
-          \ 'inputFingerprint': fingerprint})\n    base = booklet_origin.rstrip('/')\
-          \ + '/api/experiments/booklet-tools/'\n    return {'fixture_url': base +\
-          \ 'image-fixture?' + query, 'upload_url': base + 'image?' + query, 'input_fingerprint':\
-          \ fingerprint, 'authorization_reason': ''}\n"
-        code_language: python3
-        outputs:
-          authorization_reason:
-            children: null
-            type: string
-          fixture_url:
-            children: null
-            type: string
-          input_fingerprint:
-            children: null
-            type: string
-          upload_url:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Check authorization and form operation URLs
-        type: code
-        variables:
-        - value_selector:
-          - m4_image_authorize
-          - body
-          variable: authorization_body
-        - value_selector:
-          - m4_image_authorize
-          - status_code
-          variable: status_code
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - env
-          - BOOKLET_ORIGIN
-          variable: booklet_origin
-      height: 52
-      id: m4_image_prepare
-      position:
-        x: 840
-        y: 0
-      positionAbsolute:
-        x: 840
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        cases:
-        - case_id: 'true'
-          conditions:
-          - comparison_operator: not empty
-            id: has-fixture-url
-            value: ''
-            varType: string
-            variable_selector:
-            - m4_image_prepare
-            - fixture_url
-          logical_operator: and
-        title: Download only after reservation
-        type: if-else
-      height: 140
-      id: m4_image_authorized
-      position:
-        x: 1120
-        y: 0
-      positionAbsolute:
-        x: 1120
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data: []
-          type: none
-        headers: x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}
-        method: get
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Download synthetic PNG bytes
-        type: http-request
-        url: '{{#m4_image_prepare.fixture_url#}}'
-      height: 94
-      id: m4_image_fixture
-      position:
-        x: 1400
-        y: 0
-      positionAbsolute:
-        x: 1400
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        extract_by:
-          enabled: true
-          serial: '1'
-        filter_by:
-          conditions: []
-          enabled: false
-        item_var_type: file
-        limit:
-          enabled: false
-          size: 1
-        order_by:
-          enabled: false
-          key: ''
-          value: asc
-        title: Select original fixture file
-        type: list-operator
-        var_type: array[file]
-        variable:
-        - m4_image_fixture
-        - files
-      height: 92
-      id: m4_image_select_file
-      position:
-        x: 1540
-        y: 0
-      positionAbsolute:
-        x: 1540
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data:
-          - file:
-            - m4_image_select_file
-            - first_record
-            type: file
-          type: binary
-        headers: 'Content-Type:application/octet-stream
+            import re
 
-          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
-        method: post
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Upload original fixture bytes
-        type: http-request
-        url: '{{#m4_image_prepare.upload_url#}}'
-      height: 94
-      id: m4_image_upload
-      position:
-        x: 1680
-        y: 0
-      positionAbsolute:
-        x: 1680
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nimport re\n\ndef main(body, status_code, run_id, operation_id,\
-          \ workflow_run_id, parent_workflow_run_id, input_fingerprint):\n    data\
-          \ = json.loads(body).get('data', {})\n    asset_id = data.get('assetId')\n\
-          \    digest = data.get('sha256')\n    if status_code != 200 or data.get('state')\
-          \ != 'succeeded' or asset_id != operation_id or not isinstance(digest, str)\
-          \ or not re.fullmatch(r'[0-9a-f]{64}', digest):\n        raise ValueError('Booklet\
-          \ did not confirm saved image completion')\n    result = {'runId': run_id,\
-          \ 'operationId': operation_id, 'workflowRunId': workflow_run_id, 'parentWorkflowRunId':\
-          \ parent_workflow_run_id or None, 'inputFingerprint': input_fingerprint,\
-          \ 'assetId': asset_id, 'sha256': digest}\n    return {'image_result': json.dumps(result)}\n"
-        code_language: python3
-        outputs:
-          image_result:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Require saved image completion
-        type: code
-        variables:
-        - value_selector:
-          - m4_image_upload
-          - body
-          variable: body
-        - value_selector:
-          - m4_image_upload
-          - status_code
-          variable: status_code
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - m4_image_prepare
-          - input_fingerprint
-          variable: input_fingerprint
-      height: 52
-      id: m4_image_ack
-      position:
-        x: 1960
-        y: 0
-      positionAbsolute:
-        x: 1960
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - m4_image_ack
-          - image_result
-          value_type: string
-          variable: image_result
-        - value_selector:
-          - start
-          - reference_files
-          value_type: array[file]
-          variable: reference_files
-        title: Saved image completion
-        type: end
-      height: 114
-      id: m4_image_finish
-      position:
-        x: 2240
-        y: 0
-      positionAbsolute:
-        x: 2240
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - m4_image_prepare
-          - authorization_reason
-          value_type: string
-          variable: authorization_reason
-        title: Paused without execution
-        type: end
-      height: 88
-      id: m4_image_paused
-      position:
-        x: 1400
-        y: 300
-      positionAbsolute:
-        x: 1400
-        y: 300
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nfrom uuid import UUID\n\ndef main(run_id, operation_id,\
-          \ workflow_run_id, parent_workflow_run_id, mode):\n    if mode != 'real':\n\
-          \        raise ValueError('This branch supports Real only')\n    for value\
-          \ in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n   \
-          \ if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n   \
-          \ return {'identity_json': json.dumps({'runId': run_id, 'operationId': operation_id,\
-          \ 'workflowRunId': workflow_run_id, 'parentWorkflowRunId': parent_workflow_run_id\
-          \ or None})}\n"
-        code_language: python3
-        outputs:
-          identity_json:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Validate Real identity
-        type: code
-        variables:
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - start
-          - mode
-          variable: mode
-      height: 52
-      id: real_identity
-      position:
-        x: 280
-        y: 0
-      positionAbsolute:
-        x: 280
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        cases:
-        - case_id: 'true'
-          conditions:
-          - comparison_operator: is
-            id: real_mode-match
-            value: real
-            varType: string
-            variable_selector:
-            - start
-            - mode
-          logical_operator: and
-        title: real_mode
-        type: if-else
-      height: 124
-      id: real_mode
-      position:
-        x: 250
-        y: 600
-      positionAbsolute:
-        x: 250
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        authorization:
-          type: no-auth
-        body:
-          data:
-          - type: text
-            value: '{{#real_identity.identity_json#}}'
-          type: raw-text
-        headers: 'Content-Type:application/json
+            from uuid import UUID
 
-          x-booklet-tool-key:{{#env.BOOKLET_TOOL_KEY#}}'
-        method: post
-        params: ''
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        ssl_verify: true
-        timeout:
-          connect: 10
-          read: 30
-          write: 30
-        title: Claim the prepared Real image once
-        type: http-request
-        url: '{{#env.BOOKLET_ORIGIN#}}/api/experiments/booklet-tools/authorize'
-      height: 127
-      id: real_authorize
-      position:
-        x: 560
-        y: 0
-      positionAbsolute:
-        x: 560
-        y: 0
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import hashlib\nimport json\nimport re\nimport time\n\ndef main(authorization_body,\
-          \ status_code):\n    if status_code != 200 or not isinstance(authorization_body,\
-          \ str) or len(authorization_body.encode('utf-8')) > 1048576:\n        raise\
-          \ ValueError('Booklet authorization transport failed')\n    data = json.loads(authorization_body).get('data')\n\
-          \    if not isinstance(data, dict):\n        raise ValueError('Booklet authorization\
-          \ envelope is missing')\n    result = {'authorized': '', 'authorization_reason':\
-          \ '', 'request_json': '', 'input_fingerprint': ''}\n    if data.get('started')\
-          \ is not True:\n        reason = data.get('reason')\n        if data.get('started')\
-          \ is not False or not isinstance(reason, str) or not reason or len(reason)\
-          \ > 1024:\n            raise ValueError('Booklet authorization denial is\
-          \ invalid')\n        result['authorization_reason'] = reason\n        return\
-          \ result\n    if data.get('mode') != 'real' or data.get('role') != 'image'\
-          \ or data.get('taskId') not in ('J08', 'J09', 'J10', 'J13'):\n        raise\
-          \ ValueError('Booklet image role differs')\n    fingerprint = data.get('inputFingerprint')\n\
-          \    if not isinstance(fingerprint, str) or not re.fullmatch('[0-9a-f]{64}',\
-          \ fingerprint):\n        raise ValueError('Booklet image fingerprint is\
-          \ missing')\n    request = data.get('requestJson')\n    if not isinstance(request,\
-          \ str) or not request or len(request.encode('utf-8')) > 131072 or '\\x00'\
-          \ in request:\n        raise ValueError('Booklet image request is missing')\n\
-          \    payload = json.loads(request)\n    canonical = lambda value: json.dumps(value,\
-          \ sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)\n\
-          \    if request != canonical(payload) or payload.get('schemaVersion') !=\
-          \ 'booklet_real_image_request_v1' or not isinstance(payload.get('requestDigest'),\
-          \ str):\n        raise ValueError('Booklet image request differs')\n   \
-          \ digest = payload['requestDigest']\n    body = {key: value for key, value\
-          \ in payload.items() if key != 'requestDigest'}\n    if not re.fullmatch('[0-9a-f]{64}',\
-          \ digest) or hashlib.sha256(canonical(body).encode()).hexdigest() != digest\
-          \ or type(payload.get('deadlineAtMs')) is not int or payload['deadlineAtMs']\
-          \ <= time.time() * 1000:\n        raise ValueError('Booklet image digest\
-          \ or deadline differs')\n    result.update(authorized='yes', request_json=request,\
-          \ input_fingerprint=fingerprint)\n    return result\n"
-        code_language: python3
-        outputs:
-          authorization_reason:
-            children: null
-            type: string
-          authorized:
-            children: null
-            type: string
-          input_fingerprint:
-            children: null
-            type: string
-          request_json:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: real_decode
-        type: code
-        variables:
-        - value_selector:
-          - real_authorize
-          - body
-          variable: authorization_body
-        - value_selector:
-          - real_authorize
-          - status_code
-          variable: status_code
-      height: 52
-      id: real_decode
-      position:
-        x: 1000
-        y: 600
-      positionAbsolute:
-        x: 1000
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        cases:
-        - case_id: 'true'
-          conditions:
-          - comparison_operator: is
-            id: real_authorized-match
-            value: 'yes'
-            varType: string
-            variable_selector:
-            - real_decode
-            - authorized
-          logical_operator: and
-        title: real_authorized
-        type: if-else
-      height: 148
-      id: real_authorized
-      position:
-        x: 250
-        y: 600
-      positionAbsolute:
-        x: 250
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - real_decode
-          - authorization_reason
-          value_type: string
-          variable: authorization_reason
-        title: real_paused
-        type: end
-      height: 88
-      id: real_paused
-      position:
-        x: 2100
-        y: 600
-      positionAbsolute:
-        x: 2100
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        provider_id: langgenius/openai_tool/openai
-        provider_name: openai
-        provider_type: builtin
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: Booklet bounded Real image
-        tool_configurations: {}
-        tool_label: Booklet Real image
-        tool_name: booklet_real_image
-        tool_node_version: '2'
-        tool_parameters:
-          booklet_tool_key:
-            type: mixed
-            value: '{{#env.BOOKLET_TOOL_KEY#}}'
-          input_fingerprint:
-            type: variable
-            value:
-            - real_decode
-            - input_fingerprint
-          operation_id:
-            type: variable
-            value:
-            - start
-            - operation_id
-          parent_workflow_run_id:
-            type: variable
-            value:
-            - start
-            - parent_workflow_run_id
-          reference_files:
-            type: variable
-            value:
-            - start
-            - reference_files
-          request_json:
-            type: variable
-            value:
-            - real_decode
-            - request_json
-          run_id:
-            type: variable
-            value:
-            - start
-            - run_id
-          workflow_run_id:
-            type: variable
-            value:
-            - sys
-            - workflow_run_id
-        type: tool
-      height: 52
-      id: real_image_tool
-      position:
-        x: 1500
-        y: 600
-      positionAbsolute:
-        x: 1500
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        code: "import json\nimport re\nfrom uuid import UUID\n\ndef main(tool_json,\
-          \ request_json, run_id, operation_id, workflow_run_id, parent_workflow_run_id,\
-          \ input_fingerprint):\n    if not isinstance(tool_json, list) or len(tool_json)\
-          \ != 1 or not isinstance(tool_json[0], dict):\n        raise ValueError('Booklet\
-          \ image tool result is missing')\n    wrapper = tool_json[0]\n    outcome\
-          \ = wrapper.get('result')\n    if isinstance(outcome, dict) and outcome.get('status')\
-          \ in ('unknown_outcome', 'failed_after_provider', 'rejected_pre_provider'):\n\
-          \        raise ValueError('Booklet image provider outcome: ' + json.dumps(outcome,\
-          \ sort_keys=True))\n    if set(wrapper) != {'result', 'upload'}:\n     \
-          \   raise ValueError('Booklet image upload receipt is missing')\n    result\
-          \ = wrapper['result']\n    upload = wrapper['upload']\n    request = json.loads(request_json)\n\
-          \    output = result.get('output') if isinstance(result, dict) else None\n\
-          \    if (not isinstance(result, dict) or result.get('schemaVersion') !=\
-          \ 'booklet_real_image_result_v1'\n            or result.get('adapterIdentity')\
-          \ != 'm5-openai-image-bounded@1'\n            or result.get('status') !=\
-          \ 'succeeded' or result.get('requestDigest') != request.get('requestDigest')\n\
-          \            or not isinstance(output, dict) or not isinstance(upload, dict)\n\
-          \            or upload.get('state') != 'succeeded' or upload.get('assetId')\
-          \ != operation_id\n            or upload.get('sha256') != output.get('sha256')\n\
-          \            or not isinstance(output.get('sha256'), str) or not re.fullmatch('[0-9a-f]{64}',\
-          \ output['sha256'])\n            or type(upload.get('reused')) is not bool):\n\
-          \        raise ValueError('Booklet image evidence is missing')\n    for\
-          \ value in (run_id, operation_id, workflow_run_id):\n        UUID(value)\n\
-          \    if parent_workflow_run_id:\n        UUID(parent_workflow_run_id)\n\
-          \    if not isinstance(input_fingerprint, str) or not re.fullmatch('[0-9a-f]{64}',\
-          \ input_fingerprint):\n        raise ValueError('Booklet image fingerprint\
-          \ is missing')\n    ack = {'runId': run_id, 'operationId': operation_id,\
-          \ 'workflowRunId': workflow_run_id,\n           'parentWorkflowRunId': parent_workflow_run_id\
-          \ or None, 'inputFingerprint': input_fingerprint,\n           'assetId':\
-          \ upload['assetId'], 'sha256': output['sha256']}\n    return {'image_result':\
-          \ json.dumps(ack, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}\n"
-        code_language: python3
-        outputs:
-          image_result:
-            children: null
-            type: string
-        retry_config:
-          max_retries: 0
-          retry_enabled: false
-          retry_interval: 0
-        title: real_image_result
-        type: code
-        variables:
-        - value_selector:
-          - real_image_tool
-          - json
-          variable: tool_json
-        - value_selector:
-          - real_decode
-          - request_json
-          variable: request_json
-        - value_selector:
-          - start
-          - run_id
-          variable: run_id
-        - value_selector:
-          - start
-          - operation_id
-          variable: operation_id
-        - value_selector:
-          - sys
-          - workflow_run_id
-          variable: workflow_run_id
-        - value_selector:
-          - start
-          - parent_workflow_run_id
-          variable: parent_workflow_run_id
-        - value_selector:
-          - real_decode
-          - input_fingerprint
-          variable: input_fingerprint
-      height: 52
-      id: real_image_result
-      position:
-        x: 1000
-        y: 600
-      positionAbsolute:
-        x: 1000
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
-    - data:
-        outputs:
-        - value_selector:
-          - real_image_result
-          - image_result
-          value_type: string
-          variable: image_result
-        - value_selector:
-          - start
-          - reference_files
-          value_type: array[file]
-          variable: reference_files
-        title: real_image_finish
-        type: end
-      height: 114
-      id: real_image_finish
-      position:
-        x: 2100
-        y: 600
-      positionAbsolute:
-        x: 2100
-        y: 600
-      type: custom
-      width: 242
-      zIndex: 0
+
+            def main(tool_json, request_json, run_id, operation_id, workflow_run_id, parent_workflow_run_id,
+            input_fingerprint):
+                if not isinstance(tool_json, list) or len(tool_json) != 1 or not isinstance(tool_json[0], dict):
+                    raise ValueError('Booklet image tool result is missing')
+                wrapper = tool_json[0]
+                outcome = wrapper.get('result')
+                if isinstance(outcome, dict) and outcome.get('status') in ('unknown_outcome', 'failed_after_provider', 'rejected_pre_provider'):
+                    raise ValueError('Booklet image provider outcome: ' + json.dumps(outcome, sort_keys=True))
+                if set(wrapper) != {'result', 'upload'}:
+                    raise ValueError('Booklet image upload receipt is missing')
+                result = wrapper['result']
+                upload = wrapper['upload']
+                request = json.loads(request_json)
+                output = result.get('output') if isinstance(result, dict) else None
+                if (not isinstance(result, dict) or result.get('schemaVersion') != 'booklet_real_image_result_v1'
+                        or result.get('adapterIdentity') != 'm5-openai-image-bounded@1'
+                        or result.get('status') != 'succeeded' or result.get('requestDigest') != request.get('requestDigest')
+                        or not isinstance(output, dict) or not isinstance(upload, dict)
+                        or upload.get('state') != 'succeeded' or upload.get('assetId') != operation_id
+                        or upload.get('sha256') != output.get('sha256')
+                        or not isinstance(output.get('sha256'), str) or not re.fullmatch('[0-9a-f]{64}', output['sha256'])
+                        or type(upload.get('reused')) is not bool):
+                    raise ValueError('Booklet image evidence is missing')
+                for value in (run_id, operation_id, workflow_run_id):
+                    UUID(value)
+                if parent_workflow_run_id:
+                    UUID(parent_workflow_run_id)
+                if not isinstance(input_fingerprint, str) or not re.fullmatch('[0-9a-f]{64}', input_fingerprint):
+                    raise ValueError('Booklet image fingerprint is missing')
+                ack = {'runId': run_id, 'operationId': operation_id, 'workflowRunId': workflow_run_id,
+                       'parentWorkflowRunId': parent_workflow_run_id or None, 'inputFingerprint': input_fingerprint,
+                       'assetId': upload['assetId'], 'sha256': output['sha256']}
+                return {'image_result': json.dumps(ack, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}
+          code_language: python3
+          outputs:
+            image_result:
+              children: null
+              type: string
+          retry_config:
+            max_retries: 0
+            retry_enabled: false
+            retry_interval: 0
+          title: real_image_result
+          type: code
+          variables:
+            - value_selector:
+                - real_image_tool
+                - json
+              variable: tool_json
+            - value_selector:
+                - real_decode
+                - request_json
+              variable: request_json
+            - value_selector:
+                - start
+                - run_id
+              variable: run_id
+            - value_selector:
+                - start
+                - operation_id
+              variable: operation_id
+            - value_selector:
+                - sys
+                - workflow_run_id
+              variable: workflow_run_id
+            - value_selector:
+                - start
+                - parent_workflow_run_id
+              variable: parent_workflow_run_id
+            - value_selector:
+                - real_decode
+                - input_fingerprint
+              variable: input_fingerprint
+        height: 52
+        id: real_image_result
+        position:
+          x: 1000
+          "y": 600
+        positionAbsolute:
+          x: 1000
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
+      - data:
+          outputs:
+            - value_selector:
+                - real_image_result
+                - image_result
+              value_type: string
+              variable: image_result
+            - value_selector:
+                - start
+                - reference_files
+              value_type: array[file]
+              variable: reference_files
+          title: real_image_finish
+          type: end
+        height: 114
+        id: real_image_finish
+        position:
+          x: 2100
+          "y": 600
+        positionAbsolute:
+          x: 2100
+          "y": 600
+        type: custom
+        width: 242
+        zIndex: 0
     viewport:
       x: 0
-      y: 0
+      "y": 0
       zoom: 1
   rag_pipeline_variables: []
