@@ -1,0 +1,808 @@
+{
+  "schemaVersion": 1,
+  "sourceHost": "https://dify.uniwares.co.uk",
+  "workspaceId": "ffac910f-2786-490e-90d8-07243d49741b",
+  "capturedAt": "2026-11-08T08:32:40.743Z",
+  "selectionPolicy": "Current published versions of the explicit 18-app Issue #65 suite; excludes earlier manager/tester variants and all control, transport, and recovery probes.",
+  "checksumPolicy": "SHA-256; DSL hashes use exact UTF-8 file bytes. Graph/configuration hashes use compact JSON with recursively sorted object keys and preserved array order.",
+  "environmentComparison": "Secret values are empty; native export includes environment selector metadata absent from the publication API response. Comparison removes selector and empties secret values on both sides. Non-secret values and remaining declaration fields must match.",
+  "workflows": [
+    {
+      "name": "issue65_m3_manager",
+      "role": "Manager",
+      "group": "Orchestration",
+      "appId": "46572ccb-d954-45e5-b73d-90fd0995cdb6",
+      "publishedWorkflowId": "be42392c-1fe1-4872-9139-86f14ae60a28",
+      "editorUrl": "https://dify.uniwares.co.uk/app/46572ccb-d954-45e5-b73d-90fd0995cdb6/workflow",
+      "capturedAt": "2026-11-08T08:21:03.749Z",
+      "publishedAt": "2026-10-31T10:56:57.000Z",
+      "readmePath": "workflows/issue65_m3_manager/README.md",
+      "dslPath": "workflows/issue65_m3_manager/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "dbe8910236db63fb61acc6be32fccafb906f712e8601eb827b786989d62e7694",
+      "publishedGraphSha256": "3cca8b627ff2b03fafe456fc0b982bfb62b34be0f5975e73330675034f902658",
+      "publishedConfigurationSha256": "f755b0e3064923e873108afc0fdd373aece78d17b0f2ae3e46b31a489f6d865a",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "4919c78815ca10a88cd8d0d0820e1dbc10b041cc13fed9c3b896f32d0f6046a4"
+    },
+    {
+      "name": "issue65_m1_J01",
+      "role": "J01 — Book concept",
+      "group": "Narrative",
+      "appId": "7c186b42-a069-4059-aac6-5589e870951f",
+      "publishedWorkflowId": "9b172681-6845-4803-9194-6f5f5c1984dd",
+      "editorUrl": "https://dify.uniwares.co.uk/app/7c186b42-a069-4059-aac6-5589e870951f/workflow",
+      "capturedAt": "2026-11-08T08:21:09.685Z",
+      "publishedAt": "2026-10-28T10:42:58.000Z",
+      "readmePath": "workflows/issue65_m1_J01/README.md",
+      "dslPath": "workflows/issue65_m1_J01/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "672add46a789199c82c6b48c2ca0a13ea1da9442a7148d8518ca6c89b8e7072f",
+      "publishedGraphSha256": "b8d69b89e4f992e0b4a60eddd6f10be61d083f14455b8a5cf5b5a1e47f80b4be",
+      "publishedConfigurationSha256": "337f395ad52385f6410e6f8892ba61ab6c9302d5981e9fe8a90167ce0350ae1d",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "f95ce476b6ad79f27766be5b25afeb53a4ec8e25987d168710f6e76f442f4f2e"
+    },
+    {
+      "name": "issue65_m1_J02",
+      "role": "J02 — Story outline",
+      "group": "Narrative",
+      "appId": "4b49ed43-218d-4892-981f-acfe7181c60c",
+      "publishedWorkflowId": "118598e8-a13c-46fb-b8f9-ab28ff64ca02",
+      "editorUrl": "https://dify.uniwares.co.uk/app/4b49ed43-218d-4892-981f-acfe7181c60c/workflow",
+      "capturedAt": "2026-11-08T08:21:14.966Z",
+      "publishedAt": "2026-10-28T10:47:37.000Z",
+      "readmePath": "workflows/issue65_m1_J02/README.md",
+      "dslPath": "workflows/issue65_m1_J02/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "a6bd1bb1ebd823df1bf09052e491fb3f02a4762e7e3cc5539b0cd99adcc710cf",
+      "publishedGraphSha256": "966b7f92bd8e9b5d93aeb0707b19e65e686f70d6809bc3b311b03e7a3c6338e1",
+      "publishedConfigurationSha256": "a0420d82c2e398944c0697c52057228a820fc0c5d5710049ce7fe4f71b207bf6",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "2bb50f658f928fa698e4d00a46c4b76fc718b9c6c3e45d8d7834871affdd755b"
+    },
+    {
+      "name": "issue65_m2_J03",
+      "role": "J03 — Draft characters",
+      "group": "Narrative",
+      "appId": "9f9b7ce0-1753-4999-87e0-290dcd47b46a",
+      "publishedWorkflowId": "888e9f60-0f72-4100-b8c4-588f0b6788dd",
+      "editorUrl": "https://dify.uniwares.co.uk/app/9f9b7ce0-1753-4999-87e0-290dcd47b46a/workflow",
+      "capturedAt": "2026-11-08T08:21:20.382Z",
+      "publishedAt": "2026-10-28T10:47:52.000Z",
+      "readmePath": "workflows/issue65_m2_J03/README.md",
+      "dslPath": "workflows/issue65_m2_J03/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "d1f2e8054400175c45b115d961520e69f101b59a602ea3481392088fa80d161c",
+      "publishedGraphSha256": "815272d00e0741506879c33113b2c45abb93c56ce60cc688a21977f4a7748811",
+      "publishedConfigurationSha256": "434c151778baf90aa6f554417aaa689b382ec0fd4dac0fc9effbc3b40a031172",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "f707e60e0cefa227b13cbb58a12f6ce98ea2817fe83aa0aeb280e398d8c1d48f"
+    },
+    {
+      "name": "issue65_m2_J04",
+      "role": "J04 — Draft locations",
+      "group": "Narrative",
+      "appId": "98bb1b3f-d287-4f5b-a764-b47b30c314af",
+      "publishedWorkflowId": "76601b9a-2e9b-4a08-b027-60673538e9b1",
+      "editorUrl": "https://dify.uniwares.co.uk/app/98bb1b3f-d287-4f5b-a764-b47b30c314af/workflow",
+      "capturedAt": "2026-11-08T08:21:26.475Z",
+      "publishedAt": "2026-10-28T10:48:08.000Z",
+      "readmePath": "workflows/issue65_m2_J04/README.md",
+      "dslPath": "workflows/issue65_m2_J04/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "3e84212891eb76da2d4006a6d94ff2a4c11b46eaa7761c449ea30c2fe0e63aa5",
+      "publishedGraphSha256": "34b5344070b5b29d1bf63c57e5335a2b449fcb5b67201220a254de74ba80ba96",
+      "publishedConfigurationSha256": "660b43ca106e40e5c971d6c333ca14252221a862378d93271b52d1c0deee5c41",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "cee140807b90ea03fc75df3261fb2fc4d91d4dee66173b57987463c9497ce987"
+    },
+    {
+      "name": "issue65_m2_J05",
+      "role": "J05 — Manuscript",
+      "group": "Narrative",
+      "appId": "4c7aff37-66fd-4dd5-a6a0-246001fd8d27",
+      "publishedWorkflowId": "ccd977e9-79d4-4f4c-aa19-4d5aa366ed5d",
+      "editorUrl": "https://dify.uniwares.co.uk/app/4c7aff37-66fd-4dd5-a6a0-246001fd8d27/workflow",
+      "capturedAt": "2026-11-08T08:21:31.977Z",
+      "publishedAt": "2026-10-28T10:48:29.000Z",
+      "readmePath": "workflows/issue65_m2_J05/README.md",
+      "dslPath": "workflows/issue65_m2_J05/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "39622bb4a348addd1979479f1086f12316a90a52918714a36a389316fc680096",
+      "publishedGraphSha256": "ac482c4254c13eb66644c388112e42435b01d2bd50d751cab7a21bff069dc829",
+      "publishedConfigurationSha256": "359070910832dfd5f2197102650e6df63052a435cd1f2c86f5ea191f58aed151",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "623648e9186320b837a38e19d11de884638f664a8a73453489d6dbbb6af8bfac"
+    },
+    {
+      "name": "issue65_m2_J06",
+      "role": "J06 — Final characters",
+      "group": "Narrative",
+      "appId": "fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe",
+      "publishedWorkflowId": "0d09f187-34cb-4f30-9377-ad4cf233c822",
+      "editorUrl": "https://dify.uniwares.co.uk/app/fddf2de9-cdcd-4e1d-bcc7-3141c326a7fe/workflow",
+      "capturedAt": "2026-11-08T08:21:37.289Z",
+      "publishedAt": "2026-10-28T10:48:54.000Z",
+      "readmePath": "workflows/issue65_m2_J06/README.md",
+      "dslPath": "workflows/issue65_m2_J06/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "273ce1f5881d6f1329047be05c3be92b8f21fa634e3dd0cc03f8fd76d63ca0ff",
+      "publishedGraphSha256": "905640f1a066c60d4e7e795753e9d70f80c16ad67ec1ca84b56280e3a2c3caca",
+      "publishedConfigurationSha256": "c091643d8f9cde7b7d0abc02e523ca255b42a108c465e4abeca0587c27f7bd97",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "f39b3aac037b57de4fb8b85082543fe9c3d34a485310c99e22dff5e5b2b06471"
+    },
+    {
+      "name": "issue65_m2_J07",
+      "role": "J07 — Final locations",
+      "group": "Narrative",
+      "appId": "dafefca5-4155-465b-9cdf-6bb041ac0d99",
+      "publishedWorkflowId": "8246398b-4e62-4da5-8ce0-75bf911e4a17",
+      "editorUrl": "https://dify.uniwares.co.uk/app/dafefca5-4155-465b-9cdf-6bb041ac0d99/workflow",
+      "capturedAt": "2026-11-08T08:21:42.742Z",
+      "publishedAt": "2026-10-28T10:49:23.000Z",
+      "readmePath": "workflows/issue65_m2_J07/README.md",
+      "dslPath": "workflows/issue65_m2_J07/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "c5fde12c8c17e05bda9f77e0d1032ed1e979d29f2fdcc894cd0d042985d5ef43",
+      "publishedGraphSha256": "1bbd7b2fa176b86dca4ddd8578341b0b06b3cd856ea0a64b9bcf54aadd870ed9",
+      "publishedConfigurationSha256": "fbe31e1b9c9cdcea277a6daba9dafcdbf8b578c18fc2997227f0d6aea679f6a4",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "6ac4cd2ad2e1b7df8aab757f62b959b308796ed55ef9a642c765ada2ade8662a"
+    },
+    {
+      "name": "issue65_m2_J08",
+      "role": "J08 — Visual style",
+      "group": "Visual/page planning",
+      "appId": "0fc8f253-1ae6-4103-a105-4f737ce995d6",
+      "publishedWorkflowId": "2943c9ab-d570-4595-9021-91572edf1341",
+      "editorUrl": "https://dify.uniwares.co.uk/app/0fc8f253-1ae6-4103-a105-4f737ce995d6/workflow",
+      "capturedAt": "2026-11-08T08:21:48.017Z",
+      "publishedAt": "2026-10-28T10:49:40.000Z",
+      "readmePath": "workflows/issue65_m2_J08/README.md",
+      "dslPath": "workflows/issue65_m2_J08/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "eeb3c9bd0fc0e105a1058e69d2809b56d573a28ef717655da0f86a5534568067",
+      "publishedGraphSha256": "5bc63a4cad878283dbb7473f514443c11ed0c1668ff3ab3d075b036a4b19fa53",
+      "publishedConfigurationSha256": "7b6d8281bebb800aa192246c99ecc77e67a27dede6336ab3079ea17b33016d6f",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "fbf379eab43d794ad7489ce9dc6412c7e45049100dfa28873ced35a106365d9c"
+    },
+    {
+      "name": "issue65_m2_J09",
+      "role": "J09 — Character sheet",
+      "group": "Visual/page planning",
+      "appId": "fed00cde-73e7-4881-b818-6b2ab5cfabdb",
+      "publishedWorkflowId": "410c30c1-9834-434e-ace1-25573732adc6",
+      "editorUrl": "https://dify.uniwares.co.uk/app/fed00cde-73e7-4881-b818-6b2ab5cfabdb/workflow",
+      "capturedAt": "2026-11-08T08:21:53.202Z",
+      "publishedAt": "2026-10-28T10:50:01.000Z",
+      "readmePath": "workflows/issue65_m2_J09/README.md",
+      "dslPath": "workflows/issue65_m2_J09/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "f739efbe55477b515fa7791b251cf3972b5367407258a0270b4aae5f2a84b1f5",
+      "publishedGraphSha256": "f3a6c9ea1219aa8d7b7e0fa62810e7ebdca83fd720f0b6488ca8407b8e9e25bf",
+      "publishedConfigurationSha256": "b6a15c4942af57316e3a905b8e519334613314b68c7684649292d2637b261a33",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "2029cca9ba48e62a3e523970eb750273cbb844e2d4da0e2b846b6234ae85732e"
+    },
+    {
+      "name": "issue65_m2_J10",
+      "role": "J10 — Location sheet",
+      "group": "Visual/page planning",
+      "appId": "bf6a5e06-3168-4e81-a02a-c4b8eb4c8066",
+      "publishedWorkflowId": "1415a16e-be40-4c70-a355-0affa27644bb",
+      "editorUrl": "https://dify.uniwares.co.uk/app/bf6a5e06-3168-4e81-a02a-c4b8eb4c8066/workflow",
+      "capturedAt": "2026-11-08T08:21:59.937Z",
+      "publishedAt": "2026-10-28T10:50:23.000Z",
+      "readmePath": "workflows/issue65_m2_J10/README.md",
+      "dslPath": "workflows/issue65_m2_J10/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "b0f023a6ebae393fe536cc55506dcb1bdf7c07aab1f30ba0f3254b221b66ee5d",
+      "publishedGraphSha256": "2507812e7aa967f829763b38b23a38fa1b450ec6d99c4d2f8a1936bff8c3bd8a",
+      "publishedConfigurationSha256": "47d2a65406b947c38659e54220401dcd3bda80150d0c697864a70281f01c5979",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "9ccd5f0977ddad8e8227f117e03fe17e678a00ffe96d695b5addb33eeb25284f"
+    },
+    {
+      "name": "issue65_m3_J11",
+      "role": "J11 — Pagination and layout",
+      "group": "Visual/page planning",
+      "appId": "4f4704ca-de02-4a6d-8051-ba6849fdda56",
+      "publishedWorkflowId": "13a875ee-551e-43ef-9501-72ea60f21542",
+      "editorUrl": "https://dify.uniwares.co.uk/app/4f4704ca-de02-4a6d-8051-ba6849fdda56/workflow",
+      "capturedAt": "2026-11-08T08:22:05.639Z",
+      "publishedAt": "2026-10-28T10:52:53.000Z",
+      "readmePath": "workflows/issue65_m3_J11/README.md",
+      "dslPath": "workflows/issue65_m3_J11/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "8f83c5a604087205b8e9df8e1872b3d54c542ad80d46e42fddf046dea9931ed6",
+      "publishedGraphSha256": "a4ab875d648d1cb572880b53cdd24b7dea8631462b5de7bb57713bfc8bb873d6",
+      "publishedConfigurationSha256": "fad4b264ca0efbe50b22068caa83bc71d2de66d68909963bbf6ad62d4f06332b",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "867a5de321167d7edae08933db0c36517c9549ffa4c00ac84abde8c635133797"
+    },
+    {
+      "name": "issue65_m3_J12",
+      "role": "J12 — Page Bible",
+      "group": "Visual/page planning",
+      "appId": "f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1",
+      "publishedWorkflowId": "17f95a69-4393-4001-902d-947ccc55672c",
+      "editorUrl": "https://dify.uniwares.co.uk/app/f70bc4bc-7253-4031-8f9d-eb1e3aaf7df1/workflow",
+      "capturedAt": "2026-11-08T08:22:10.835Z",
+      "publishedAt": "2026-10-28T10:53:11.000Z",
+      "readmePath": "workflows/issue65_m3_J12/README.md",
+      "dslPath": "workflows/issue65_m3_J12/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "1c8a16d82db07fd8fd1450158a05025deebb48c45a3c3f00a4d94900d800900f",
+      "publishedGraphSha256": "16a97a40d18c8ca6d9b6312a1d3f0803add1f4bc72d20250ab9de84cf8472d0d",
+      "publishedConfigurationSha256": "24030df0578d1bbf82ff34804f0f031d327685d9148eca5615dadcb56f23e14a",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "18a947c3a3d47ad1f3a5c6eb9152e1e0fcbde3df58ca3482da378519ffeb2e4d"
+    },
+    {
+      "name": "issue65_m2_image_probe",
+      "role": "Shared image executor, including J13",
+      "group": "Image execution",
+      "appId": "923566e9-c6fd-4936-836f-b21704d39628",
+      "publishedWorkflowId": "d016b1e3-93a6-4e9b-8509-de2a9b3568ad",
+      "editorUrl": "https://dify.uniwares.co.uk/app/923566e9-c6fd-4936-836f-b21704d39628/workflow",
+      "capturedAt": "2026-11-08T08:22:16.438Z",
+      "publishedAt": "2026-11-01T13:18:09.000Z",
+      "readmePath": "workflows/issue65_m2_image_probe/README.md",
+      "dslPath": "workflows/issue65_m2_image_probe/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "f6914b69c4ec67804689b628350347ba8853f235859fbbdfc465d567bd62b523",
+      "publishedGraphSha256": "99079d128330c5f6a13d0811ddaec1206a329215707a3ff793026bb159b70901",
+      "publishedConfigurationSha256": "13133cc270ff6c10fd9c34349bfbad94de9bd1530750f65ec412bf1d6c54dc20",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai_tool:0.2.2-dev3@8a7f865a47ce9e25260bd7d7cade70d4712506d945a7a2a66607f9f324160f05"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 2,
+          "issues": [
+            {
+              "level": "warning",
+              "code": "UNKNOWN_NODE_TYPE",
+              "message": "node 'select_file' type 'list-operator' not recognized; skipped per-type checks",
+              "nodeId": "select_file"
+            },
+            {
+              "level": "warning",
+              "code": "UNKNOWN_NODE_TYPE",
+              "message": "node 'm4_image_select_file' type 'list-operator' not recognized; skipped per-type checks",
+              "nodeId": "m4_image_select_file"
+            }
+          ],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 0,
+            "tool": 1,
+            "http-request": 3
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "c320b77ec22371763a64730958b9673317af4079b6b4f315d0cd2f64b13db336"
+    },
+    {
+      "name": "issue65_m3_playful_kid",
+      "role": "Playful Kid tester",
+      "group": "Evaluation",
+      "appId": "bf57a8ea-1be6-4a97-a5c0-023cfde794f8",
+      "publishedWorkflowId": "4d295741-f1e5-4d2d-ac22-5f1243d703b9",
+      "editorUrl": "https://dify.uniwares.co.uk/app/bf57a8ea-1be6-4a97-a5c0-023cfde794f8/workflow",
+      "capturedAt": "2026-11-08T08:22:21.660Z",
+      "publishedAt": "2026-10-31T16:35:54.000Z",
+      "readmePath": "workflows/issue65_m3_playful_kid/README.md",
+      "dslPath": "workflows/issue65_m3_playful_kid/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "aa1e8d4d717042a04a1942e81ab4055c257e378e129e128eaa8434d5bc7db701",
+      "publishedGraphSha256": "a08f3898309bf3bbd554f6eee673be4f05eaa4e338d181d5e26a8a24b4ba7966",
+      "publishedConfigurationSha256": "e282c0c04004f7e7d96c469ba17641454d03d129fd368c1c8c89f9b86e751fd2",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "9f22be8c8b04ea709661340d1e33723e4b96d4a2cd8b925c1a1f0b6c1485d1a1"
+    },
+    {
+      "name": "issue65_m3_enthusiast_parent",
+      "role": "Enthusiast Parent tester",
+      "group": "Evaluation",
+      "appId": "593fb610-624e-404c-92de-57f54e9a47fb",
+      "publishedWorkflowId": "c208d6c2-c88e-438b-849a-a9042b6834f5",
+      "editorUrl": "https://dify.uniwares.co.uk/app/593fb610-624e-404c-92de-57f54e9a47fb/workflow",
+      "capturedAt": "2026-11-08T08:22:27.072Z",
+      "publishedAt": "2026-10-31T16:36:51.000Z",
+      "readmePath": "workflows/issue65_m3_enthusiast_parent/README.md",
+      "dslPath": "workflows/issue65_m3_enthusiast_parent/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "906cfb8b23283f98dde41a1494117625b9627b9106ef10cebad7c6cfa78d41e4",
+      "publishedGraphSha256": "31e510c1933410f7776bb12cccbf5dbd522d5cd4c985889c9bcf9b343a222274",
+      "publishedConfigurationSha256": "7a8ea256b1102ace369014f82849138637f2b4521c176847884126423d61c999",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "fb04e5463048a888576f209d1103fdfbba4beab141eb62495a4ece041ffd50ac"
+    },
+    {
+      "name": "issue65_m3_professional_creator",
+      "role": "Professional Creator tester",
+      "group": "Evaluation",
+      "appId": "cd284244-63d5-4169-95c3-9790001a5240",
+      "publishedWorkflowId": "c2186c69-269e-48e5-972f-1a1b3a8bbb2f",
+      "editorUrl": "https://dify.uniwares.co.uk/app/cd284244-63d5-4169-95c3-9790001a5240/workflow",
+      "capturedAt": "2026-11-08T08:22:32.668Z",
+      "publishedAt": "2026-10-31T16:37:24.000Z",
+      "readmePath": "workflows/issue65_m3_professional_creator/README.md",
+      "dslPath": "workflows/issue65_m3_professional_creator/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "80136d7a26130458ab583d3da7c3b6074a23ae1c1ca8effdbcf88d94063a3e4e",
+      "publishedGraphSha256": "dbee90fb836af2f29096fe47dcc319ac9edd6983711983fabae254bf6dfa5b28",
+      "publishedConfigurationSha256": "c0d6faf518e7353201be0e46f405ae56f59258475e9094132fb941eeab1e862e",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "e8aaaa58618dee35f0284714998f193e125939dc8e22621eb782072a211d11f7"
+    },
+    {
+      "name": "issue65_m3_judge",
+      "role": "Independent judge",
+      "group": "Evaluation",
+      "appId": "89f1adcd-1073-460d-98a3-e4df35c4263c",
+      "publishedWorkflowId": "de9614e4-dbb6-4286-9a15-43d570c963bc",
+      "editorUrl": "https://dify.uniwares.co.uk/app/89f1adcd-1073-460d-98a3-e4df35c4263c/workflow",
+      "capturedAt": "2026-11-08T08:22:37.892Z",
+      "publishedAt": "2026-10-31T16:37:37.000Z",
+      "readmePath": "workflows/issue65_m3_judge/README.md",
+      "dslPath": "workflows/issue65_m3_judge/workflow.yml",
+      "dslVersion": "0.7.0",
+      "dslSha256": "7c80c7eb09ead6a1b2d54695b2c6333699c9f941c6b4d9762f86f608db3adae9",
+      "publishedGraphSha256": "8ea0c7d4246911c47ea60f591a6be36c12c8ad1fc4d7d4a5661ba809ad14490a",
+      "publishedConfigurationSha256": "a6d0c5156d882741344383306beedb41ed5c8aecfa22ea916f28639dcb47f325",
+      "captureMethod": "native_export",
+      "pluginDependencies": [
+        "langgenius/openai:1.0.7-dev7@aa245c63d95bee61fbd250e86b5ab7da4accec08144e075e4a4d8dd94bf5eba2"
+      ],
+      "sanitizedFields": [
+        "workflow.environment_variables[1].value"
+      ],
+      "validation": {
+        "yamlParsing": "pass",
+        "publicationParity": "pass; exact graph/features/conversation variables; normalized environment metadata and secret omission",
+        "graphChecks": {
+          "valid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "issues": [],
+          "localSelectors": "pass; node references and declared Start/Code outputs checked",
+          "reachability": "pass",
+          "maximumGraphPathInvocations": {
+            "llm": 1,
+            "tool": 0,
+            "http-request": 2
+          }
+        },
+        "documentationChecks": "pass; input/output/model/identity tables checked against captured graph; independent prose review recorded separately"
+      },
+      "readmeSha256": "f7fee47cedde1bec42fae586a9d22a5aa24ef994c70bdae148e0abfa1207e0b2"
+    }
+  ],
+  "validation": {
+    "checkedAt": "2026-11-08T08:51:01.599Z",
+    "fileCount": 38,
+    "workflowCount": 18,
+    "relativeLinksChecked": 165,
+    "publicationParity": "pass for all 18; see environmentComparison",
+    "secretChecks": "pass; empty secret declarations, known source-secret exclusion, literal key/bearer/private-key scan",
+    "graphValidation": "18 valid, zero errors; image workflow has two disclosed UNKNOWN_NODE_TYPE warnings",
+    "runtimeExecution": "not performed",
+    "importCompatibility": "not tested"
+  },
+  "publicationRecheck": {
+    "checkedAt": "2026-11-08T08:51:01.600Z",
+    "result": "All 18 current publication IDs unchanged; fresh live publication graph and normalized configuration checksums match the packaged snapshots."
+  },
+  "independentReview": {
+    "status": "pass",
+    "completedAt": "2026-11-08T08:51:41.874Z",
+    "scope": "38 package files and generation-guide backlink; native DSL/provenance, factual claims, scope, secret declarations, links, checksums, and evidence limitations",
+    "result": "No blocking defects remain. Corrected the direction of the environment-selector metadata difference; all 18 README checksums and affected validation rechecked. Final manifest review evidence update covered by independent review."
+  },
+  "documentationReconciliation": {
+    "status": "pass",
+    "guideBacklink": "docs/dify-booklet-generation.md",
+    "runtimeImpact": "None; architecture, PRD, acceptance evidence, and credential inventory unchanged.",
+    "learningImpact": "Verified source provenance and snapshot refresh guidance are retained in the package; no new runtime lesson.",
+    "issueEvidence": "Post one non-closing evidence comment after the reviewed PR exists."
+  }
+}
