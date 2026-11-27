@@ -7,6 +7,7 @@
   "dify_hostname": "dify.uniwares.co.uk",
   "dify_public_enabled": true,
   "unibase_staging_hostname": "unibase-staging.uniwares.co.uk",
+  "unitale_staging_hostname": "unitale-staging.uniwares.co.uk",
   "dify_backup_bucket": "kids-booklet-dify-backups",
   "host_observation": {
     "observed_on": "2026-09-28",
