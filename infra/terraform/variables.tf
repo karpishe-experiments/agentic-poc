@@ -24,6 +24,19 @@ variable "unibase_staging_hostname" {
     error_message = "Supply a distinct lowercase Unibase staging hostname."
   }
 }
+variable "unitale_staging_hostname" {
+  type        = string
+  default     = null
+  description = "Optional owner-managed route to Unitale's private Nginx; no application deployment or ownership transfer."
+  validation {
+    condition = var.unitale_staging_hostname == null ? true : (
+      can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.unitale_staging_hostname)) &&
+      !contains([var.staging_hostname, var.prod_hostname, var.deploy_hostname, var.dify_hostname], var.unitale_staging_hostname) &&
+      var.unitale_staging_hostname != var.unibase_staging_hostname
+    )
+    error_message = "Supply a distinct lowercase Unitale staging hostname."
+  }
+}
 variable "dify_hostname" {
   type = string
   validation {

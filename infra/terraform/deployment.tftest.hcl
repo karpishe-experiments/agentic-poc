@@ -13,6 +13,24 @@ run "unibase_staging_route" {
     error_message = "Unibase must use its private listener before the existing fallback and receive a proxied DNS record."
   }
 }
+run "unitale_staging_route" {
+  command = plan
+  variables {
+    unibase_staging_hostname = "unibase-staging.example.com"
+    unitale_staging_hostname = "unitale-staging.example.com"
+  }
+  assert {
+    condition = (
+      length(cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress) == 7 &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[4].service == "http://localhost:35101" &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[5].hostname == "unitale-staging.example.com" &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[5].service == "http://localhost:34312" &&
+      cloudflare_zero_trust_tunnel_cloudflared_config.vps.config.ingress[6].service == "http_status:404" &&
+      cloudflare_dns_record.unitale_staging[0].proxied
+    )
+    error_message = "Unitale must use its private listener after Unibase, before the existing fallback, and receive a proxied DNS record."
+  }
+}
 variables {
   cloudflare_account_id = "0123456789abcdef0123456789abcdef"
   cloudflare_zone_id    = "0123456789abcdef0123456789abcdef"

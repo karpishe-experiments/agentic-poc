@@ -42,6 +42,8 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "vps" {
       { hostname = var.dify_hostname, service = var.dify_public_enabled ? "http://localhost:3300" : "http_status:503" },
       ], var.unibase_staging_hostname == null ? [] : [
       { hostname = var.unibase_staging_hostname, service = "http://localhost:35101" }
+      ], var.unitale_staging_hostname == null ? [] : [
+      { hostname = var.unitale_staging_hostname, service = "http://localhost:34312" }
     ], [{ service = "http_status:404" }])
   }
 }
@@ -49,6 +51,15 @@ resource "cloudflare_dns_record" "unibase_staging" {
   count   = var.unibase_staging_hostname == null ? 0 : 1
   zone_id = var.cloudflare_zone_id
   name    = var.unibase_staging_hostname
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.vps.id}.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
+}
+resource "cloudflare_dns_record" "unitale_staging" {
+  count   = var.unitale_staging_hostname == null ? 0 : 1
+  zone_id = var.cloudflare_zone_id
+  name    = var.unitale_staging_hostname
   type    = "CNAME"
   content = "${cloudflare_zero_trust_tunnel_cloudflared.vps.id}.cfargotunnel.com"
   ttl     = 1

@@ -537,6 +537,15 @@ this change transfers neither services nor Terraform state. Shared preparation a
 host facts are in the [infrastructure runbook](https://github.com/Uniwares-LTD/infrastructure/blob/main/docs/operations.md).
 Wait for active Booklet operations to finish before shared infrastructure changes.
 
+### Optional Unitale staging route
+
+The `unitale_staging_hostname` setting mirrors the Unibase route for Unitale: one
+proxied CNAME and one ingress rule to `http://localhost:34312`, after the Unibase rule
+and before the fallback. It defaults to null. Tracked VPS configuration proposes
+`unitale-staging.uniwares.co.uk`. The same preview, drift and ownership rules apply;
+Unitale deploys with its own restricted account and private Nginx
+([Unitale staging runbook](https://github.com/Uniwares-LTD/unitale/blob/main/docs/staging-first-deployment.md)).
+
 ### Existing rebuild procedure
 
 Use this section only to rebuild or reconcile the deployment. The canonical entrypoint is `scripts/deploy/vps-deployment.sh`; all actions preview unless `--apply` is present.
